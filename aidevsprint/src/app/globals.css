@@ -1,0 +1,212 @@
+@import "tailwindcss";
+
+/* Survol réel : souris ou trackpad uniquement. Le doigt ne survole pas —
+   sans ce garde-fou, un tap déclenche le hover et l'état reste collé.
+   À utiliser sur TOUT effet de survol : `hoverable:group-hover:…` */
+@custom-variant hoverable (@media (hover: hover) and (pointer: fine));
+
+/* ──────────────────────────────────────────────────────────────
+   Design system AIdevsprint
+   Couleurs mesurées au pixel sur design/Affiche AIdevsprint #1.
+   Source de vérité : docs/design.md
+   ────────────────────────────────────────────────────────────── */
+
+@theme {
+  /* Couleurs */
+  --color-bg: #010101;
+  /* Trois fonds, tous très sombres, dérivés des deux teintes de l'affiche.
+     Les sections alternent : sans ça tout se fond en un seul bloc noir et
+     l'œil ne voit plus où une section finit. */
+  --color-surface: #010f06; /* vert très sombre — la carte infos de l'affiche */
+  --color-surface-blue: #01060f; /* bleu très sombre — la lueur du bas */
+  --color-fg: #ffffff;
+  --color-accent: #2ee66b;
+  --color-cta: #0b63f6;
+  --color-on-accent: #03140a;
+
+  /* Lueurs de fond — ce ne sont pas des ombres */
+  --color-glow-green: #047b1f;
+  --color-glow-blue: #01085a;
+
+  /* Polices */
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+
+  /* Échelle typographique fluide, 375px → 1920px */
+  /* Bornées par la largeur ET par la hauteur : sur une fenêtre large mais
+     courte (un 14 pouces, un portable en paysage), la largeur seule produit
+     une typo qui ne tient pas dans l'écran. */
+  --text-display: clamp(2rem, min(1.21rem + 3.37vw, 11svh), 5.25rem);
+  /* Le compte à rebours est l'objet graphique du hero : sa propre échelle. */
+  --text-countdown: clamp(2.25rem, min(1.22rem + 4.4vw, 13svh), 6.5rem);
+  --text-h1: clamp(2rem, 1.39rem + 2.59vw, 4.5rem);
+  --text-h2: clamp(1.5rem, 1.14rem + 1.55vw, 3rem);
+  --text-h3: clamp(1.25rem, 1.1rem + 0.65vw, 1.875rem);
+  --text-body: clamp(1rem, 0.94rem + 0.26vw, 1.25rem);
+  --text-small: clamp(0.875rem, 0.84rem + 0.13vw, 1rem);
+
+  /* Unité d'espacement fluide : tout p-*, gap-*, size-* en dérive */
+  --spacing: clamp(0.25rem, 0.22rem + 0.12vw, 0.34rem);
+
+  /* Rayons */
+  --radius-card: 1.5rem;
+  --radius-pill: 9999px;
+  /* Les champs de saisie ont leur propre rayon : à 1.5rem sur une boîte
+     haute de 3rem, l'arrondi atteint la demi-hauteur et le champ prend la
+     forme d'un bouton — juste au-dessus d'un vrai bouton en pilule. */
+  --radius-field: 0.625rem;
+
+  /* Paliers — xl couvre les portables 14-16", 3xl les grands écrans */
+  --breakpoint-3xl: 120rem;
+
+  /* Courbes — les easings natifs manquent de punch */
+  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+/* Dégradé signature. Quatre emplacements autorisés, pas un de plus :
+   hero, CTA principal, compteur d'inscrits, accents de section. */
+:root {
+  --gradient-signature: linear-gradient(
+    100deg,
+    #2ee66b 0%,
+    #24c193 30%,
+    #1a9bba 55%,
+    #1589ce 75%,
+    #0b63f6 100%
+  );
+
+  /* Largeur de contenu : le cadrage s'arrête ici, les marges restent en % */
+  --content-max: 120rem;
+}
+
+/* Le site est sombre par nature — l'affiche est noire. Pas de thème clair. */
+html {
+  color-scheme: dark;
+
+  /* Pas de flash gris/bleu au tap : c'est le signal « ceci est un site web »
+     le plus bruyant sur iOS et Android. Chaque élément tappable a son
+     propre :active en échange. */
+  -webkit-tap-highlight-color: transparent;
+
+  /* Pas de gonflement de la typo en paysage. */
+  -webkit-text-size-adjust: 100%;
+}
+
+/* `overscroll-behavior: none` n'est PAS posé ici : c'est une page qui défile,
+   le pull-to-refresh y est légitime. La règle vaut pour les applications à
+   conteneurs de défilement propres, pas pour un site de contenu. */
+
+/* Le tap répond à l'instant où le doigt se pose, pas quand il se lève.
+   `manipulation` supprime l'attente du double-tap. */
+button,
+a,
+[role="button"] {
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* iOS zoome sur un champ dont la typo est sous 16px, et ne dézoome jamais.
+   On corrige la cause au lieu d'interdire le zoom. 1rem = le seuil. */
+input,
+textarea,
+select {
+  font-size: 1rem;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  font-size: var(--text-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Conteneur de section : marges latérales en pourcentage, jamais de bande
+   morte sur grand écran. Le contenu grandit jusqu'à --content-max. */
+.shell {
+  width: min(100% - 8%, var(--content-max));
+  margin-inline: auto;
+}
+
+@media (width >= 64rem) {
+  .shell {
+    width: min(100% - 10%, var(--content-max));
+  }
+}
+
+/* Le survol n'existe pas au doigt : tout effet est conditionné au matériel.
+   Chaque composant ajoute son :active et son :focus-visible. */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 0.1875rem;
+}
+
+/* ── La modale d'inscription ───────────────────────────────────────
+   Le `<dialog>` natif passe de `display: none` à `display: block` : sans
+   `allow-discrete`, la transition n'a pas lieu et le panneau apparaît d'un
+   coup. `@starting-style` donne l'état de départ de la toute première
+   image, celle où l'élément vient d'entrer dans la couche supérieure.
+
+   Montée d'1rem et fondu, 200 ms : exactement le vocabulaire de `Reveal`,
+   en plus court parce qu'un panneau répond à un clic, pas à un défilement.
+   Ni ombre ni flou derrière — un simple voile noir. */
+.modale-inscription,
+.modale-inscription::backdrop {
+  transition:
+    opacity 200ms var(--ease-out-strong),
+    translate 200ms var(--ease-out-strong),
+    overlay 200ms allow-discrete,
+    display 200ms allow-discrete;
+}
+
+.modale-inscription {
+  opacity: 0;
+  translate: 0 1rem;
+}
+
+.modale-inscription::backdrop {
+  /* 0,88 et pas 0,8 : l'aurore du hero est lumineuse, à 0,8 le compte à
+     rebours restait lisible derrière et se disputait le panneau. */
+  background: rgb(0 0 0 / 0.88);
+  opacity: 0;
+}
+
+.modale-inscription[open],
+.modale-inscription[open]::backdrop {
+  opacity: 1;
+  translate: 0 0;
+}
+
+@starting-style {
+  .modale-inscription[open] {
+    opacity: 0;
+    translate: 0 1rem;
+  }
+
+  .modale-inscription[open]::backdrop {
+    opacity: 0;
+  }
+}
+
+/* Accessibilité : moins de mouvement, pas zéro animation.
+   On garde opacité et couleur, on retire les déplacements. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after,
+  *::backdrop {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* La modale arrive sans monter : le fondu suffit à dire qu'elle est là. */
+  .modale-inscription,
+  .modale-inscription[open] {
+    translate: none;
+  }
+}
