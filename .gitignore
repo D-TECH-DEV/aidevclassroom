@@ -1,0 +1,27 @@
+# dependances
+node_modules/
+.pnp.*
+
+# builds et sorties generees
+dist/
+build/
+out/
+.next/
+*.tsbuildinfo
+
+# environnements (garder les .example versionnes)
+.env
+.env.*
+!.env.example
+
+# archives et livrables empaquetes
+*.tar.gz
+*.tgz
+*.zip
+
+# logs, coverage, OS
+*.log
+coverage/
+.nyc_output/
+.DS_Store
+Thumbs.db
