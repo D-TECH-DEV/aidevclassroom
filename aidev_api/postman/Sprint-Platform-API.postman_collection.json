@@ -1,0 +1,3238 @@
+{
+  "info": {
+    "_postman_id": "sprint-platform-api-v1",
+    "name": "Sprint Platform API",
+    "description": "Collection de test de l'API Sprints de formation (NestJS). Base : {{baseUrl}}{{apiPrefix}}. Reponses succes : {data, meta}. Erreurs : {statusCode, code, message}. Parcours conseille : executer les dossiers dans l'ordre via le Collection Runner.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "apiPrefix", "value": "/api/v1" },
+    { "key": "adminEmail", "value": "admin@example.com" },
+    { "key": "adminPassword", "value": "ChangeMe123!" },
+    { "key": "paystackTestMode", "value": "true" }
+  ],
+  "item": [
+    {
+      "name": "00 — Health Check",
+      "item": [
+        {
+          "name": "Sante de l'API",
+          "request": {
+            "description": "Route publique. Repond 200 meme sans MySQL (champ db = up/down).",
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "health"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", function () { pm.response.to.have.status(200); });",
+                  "var body = pm.response.json();",
+                  "pm.test(\"Format {status, db}\", function () {",
+                  "  pm.expect(body.status).to.eql(\"ok\");",
+                  "  pm.expect(body.db).to.be.oneOf([\"up\", \"down\"]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "01 — Authentification Admin",
+      "item": [
+        {
+          "name": "Login admin valide",
+          "request": {
+            "description": "POST /auth/login {email, password}. Enregistre accessToken et adminId.",
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "auth", "login"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", function () { pm.response.to.have.status(200); });",
+                  "var body = pm.response.json();",
+                  "pm.test(\"Jeton JWT recu\", function () {",
+                  "  pm.expect(body.data.accessToken).to.be.a(\"string\");",
+                  "  pm.expect(body.data.admin.email).to.eql(pm.environment.get(\"adminEmail\") || pm.variables.get(\"adminEmail\"));",
+                  "});",
+                  "pm.environment.set(\"accessToken\", body.data.accessToken);",
+                  "pm.environment.set(\"adminId\", body.data.admin.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login mot de passe incorrect",
+          "request": {
+            "description": "Doit repondre 401 INVALID_CREDENTIALS sans preciser quel champ est faux.",
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"MauvaisMotDePasse123!\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "auth", "login"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Code INVALID_CREDENTIALS\", function () {",
+                  "  pm.expect(pm.response.json().code).to.eql(\"INVALID_CREDENTIALS\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Profil connecte (me)",
+          "request": {
+            "description": "GET /auth/me avec JWT. Ne doit jamais exposer passwordHash.",
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "auth", "me"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Pas de passwordHash\", function () {",
+                  "  pm.expect(pm.response.text()).to.not.contain(\"passwordHash\");",
+                  "  pm.expect(pm.response.json().data.email).to.be.a(\"string\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Me sans token (401)",
+          "request": {
+            "description": "Route admin sans JWT : 401 attendu.",
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "auth", "me"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 401\", function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Changement mot de passe (mauvais actuel)",
+          "request": {
+            "description": "POST /auth/change-password avec un mot actuel faux : 401, mot de passe inchange (test non destructif).",
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"FauxActuel123!\",\n  \"newPassword\": \"NouveauMotDePasse123!\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/auth/change-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "auth", "change-password"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Code INVALID_CURRENT_PASSWORD\", function () {",
+                  "  pm.expect(pm.response.json().code).to.eql(\"INVALID_CURRENT_PASSWORD\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 — Administration des utilisateurs",
+      "item": [
+        {
+          "name": "Lister les admins",
+          "request": {
+            "description": "GET /admins (JWT admin). Verifie l'absence de passwordHash.",
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admins",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admins"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Aucun hash expose\", function () {",
+                  "  pm.expect(pm.response.text()).to.not.contain(\"passwordHash\");",
+                  "  pm.expect(pm.response.json().data).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Creer un admin QA",
+          "request": {
+            "description": "POST /admins. Email unique genere en pre-request pour rejouabilite.",
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"QA Testeur\",\n  \"email\": \"{{qaAdminEmail}}\",\n  \"password\": \"QaTesteur123!\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admins",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admins"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"qaAdminEmail\", \"qa-\" + Date.now() + \"@example.com\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 201/200\", function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "var body = pm.response.json();",
+                  "pm.test(\"Admin cree sans hash\", function () {",
+                  "  pm.expect(body.data.id).to.be.a(\"number\");",
+                  "  pm.expect(pm.response.text()).to.not.contain(\"passwordHash\");",
+                  "});",
+                  "pm.environment.set(\"qaAdminId\", body.data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Detail admin QA",
+          "request": {
+            "description": "GET /admins/:id.",
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admins/{{qaAdminId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admins", "{{qaAdminId}}"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Renommer admin QA",
+          "request": {
+            "description": "PATCH /admins/:id {name}. Seuls name/email/isActive sont modifiables.",
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"QA Testeur Renomme\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admins/{{qaAdminId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admins", "{{qaAdminId}}"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200 et nom mis a jour\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data.name).to.eql(\"QA Testeur Renomme\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Desactiver admin QA",
+          "request": {
+            "description": "PATCH /admins/:id/disable. Ne jamais desactiver son propre compte (403 CANNOT_DISABLE_SELF).",
+            "method": "PATCH",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admins/{{qaAdminId}}/disable",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admins", "{{qaAdminId}}", "disable"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200 et inactif\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data.isActive).to.eql(false);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login admin desactive refuse",
+          "request": {
+            "description": "Un compte desactive ne peut plus se connecter : 401.",
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{qaAdminEmail}}\",\n  \"password\": \"QaTesteur123!\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "auth", "login"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 401\", function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 — CRUD des Sprints",
+      "item": [
+        {
+          "name": "Creer un Sprint QA",
+          "request": {
+            "description": "POST /sprints (admin). Slug unique par pre-request. Prix 60000, minimum 5000, ACTIVE.",
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Sprint QA\",\n  \"slug\": \"{{qaSprintSlug}}\",\n  \"description\": \"Sprint de test Postman\",\n  \"priceXof\": 60000,\n  \"minimumPaymentXof\": 5000,\n  \"startAt\": \"2027-01-10T09:00:00.000Z\",\n  \"endAt\": \"2027-02-10T18:00:00.000Z\",\n  \"capacity\": 100,\n  \"status\": \"ACTIVE\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/sprints",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "sprints"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"qaSprintSlug\", \"sprint-qa-\" + Date.now());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 201/200\", function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "var body = pm.response.json();",
+                  "pm.test(\"Sprint cree\", function () {",
+                  "  pm.expect(body.data.id).to.be.a(\"number\");",
+                  "  pm.expect(body.data.priceXof).to.eql(60000);",
+                  "});",
+                  "pm.environment.set(\"sprintId\", body.data.id);",
+                  "pm.environment.set(\"sprintPrice\", body.data.priceXof);",
+                  "pm.environment.set(\"sprintMinimum\", body.data.minimumPaymentXof);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lister les Sprints publics",
+          "request": {
+            "description": "GET /sprints (public, pagines). Tous ACTIVE.",
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/sprints?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "sprints"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200 et pagination\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data.items).to.be.an(\"array\");",
+                  "  pm.expect(pm.response.json().data.limit).to.be.at.most(100);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Detail Sprint public",
+          "request": {
+            "description": "GET /sprints/:id. Un Sprint non actif repond 404.",
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/sprints/{{sprintId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "sprints", "{{sprintId}}"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lister tous les Sprints (admin)",
+          "request": {
+            "description": "GET /admin/sprints (JWT). Inclut les non actifs, filtre ?status=.",
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admin/sprints",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admin", "sprints"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Renommer le Sprint",
+          "request": {
+            "description": "PATCH /sprints/:id {name}.",
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Sprint QA Renomme\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/sprints/{{sprintId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "sprints", "{{sprintId}}"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Nom mis a jour\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data.name).to.eql(\"Sprint QA Renomme\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Desactiver le Sprint",
+          "request": {
+            "description": "PATCH /sprints/:id/status {status: INACTIVE}. Transition ACTIVE->INACTIVE permise.",
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"INACTIVE\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/sprints/{{sprintId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "sprints", "{{sprintId}}", "status"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut INACTIVE\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data.status).to.eql(\"INACTIVE\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reactiver le Sprint",
+          "request": {
+            "description": "PATCH /sprints/:id/status {status: ACTIVE}. Remet le Sprint utilisable pour la suite.",
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ACTIVE\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/sprints/{{sprintId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "sprints", "{{sprintId}}", "status"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut ACTIVE\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data.status).to.eql(\"ACTIVE\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 — Participants",
+      "item": [
+        {
+          "name": "Enregistrer un participant",
+          "request": {
+            "description": "POST /students (public). Email unique par pre-request. Ne revele pas l'existence.",
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Aminata\",\n  \"lastName\": \"Kone\",\n  \"email\": \"{{partEmail}}\",\n  \"phone\": \"+2250700000000\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/students",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "students"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.environment.set(\"partEmail\", \"part-\" + Date.now() + \"@example.com\");"]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 201/200\", function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "var body = pm.response.json();",
+                  "pm.test(\"Participant retourne\", function () {",
+                  "  pm.expect(body.data.student.email).to.be.a(\"string\");",
+                  "  pm.expect(body.data.created).to.be.a(\"boolean\");",
+                  "});",
+                  "pm.environment.set(\"studentId\", body.data.student.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Doublon email (pas de divulgation)",
+          "request": {
+            "description": "Meme email : 200 avec created=false, jamais 409 public.",
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Aminata\",\n  \"lastName\": \"Kone\",\n  \"email\": \"{{partEmail}}\",\n  \"phone\": \"+2250700000000\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/students",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "students"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200 et created=false\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data.created).to.eql(false);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Email invalide refuse",
+          "request": {
+            "description": "Validation DTO : 400 attendu.",
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"A\",\n  \"lastName\": \"B\",\n  \"email\": \"pas-un-email\",\n  \"phone\": \"+2250700000000\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/students",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "students"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test(\"Statut 400\", function () { pm.response.to.have.status(400); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Telephone sans prefixe refuse",
+          "request": {
+            "description": "Le telephone exige le prefixe international (+...).",
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"A\",\n  \"lastName\": \"B\",\n  \"email\": \"tel-sans-prefixe@example.com\",\n  \"phone\": \"0700000000\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/students",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "students"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test(\"Statut 400\", function () { pm.response.to.have.status(400); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lister participants (admin)",
+          "request": {
+            "description": "GET /admin/students?search=&page=&limit= (JWT).",
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admin/students?search=aminata&limit=5",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admin", "students"],
+              "query": [
+                { "key": "search", "value": "aminata" },
+                { "key": "limit", "value": "5" }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200 et items\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data.items).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Detail participant (admin)",
+          "request": {
+            "description": "GET /admin/students/:id.",
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admin/students/{{studentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admin", "students", "{{studentId}}"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test(\"Statut 200\", function () { pm.response.to.have.status(200); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Modifier telephone (admin)",
+          "request": {
+            "description": "PATCH /admin/students/:id. L'email n'est pas modifiable (pas dans UpdateStudentDto).",
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"+2250700000001\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admin/students/{{studentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admin", "students", "{{studentId}}"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Telephone mis a jour\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data.phone).to.eql(\"+2250700000001\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Historique inscriptions (admin)",
+          "request": {
+            "description": "GET /admin/students/:id/enrollments.",
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admin/students/{{studentId}}/enrollments",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admin", "students", "{{studentId}}", "enrollments"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200 et tableau\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 — Inscriptions",
+      "item": [
+        {
+          "name": "Inscrire au Sprint actif",
+          "request": {
+            "description": "POST /enrollments (public) {sprintId, student}. Le serveur fige le prix. Jeton de suivi rendu une seule fois.",
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sprintId\": {{sprintId}},\n  \"student\": {\n    \"firstName\": \"Ibrahim\",\n    \"lastName\": \"Traore\",\n    \"email\": \"{{enrollEmail}}\",\n    \"phone\": \"+2267000000000\"\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/enrollments",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "enrollments"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.environment.set(\"enrollEmail\", \"inscrit-\" + Date.now() + \"@example.com\");"]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 201/200\", function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "var body = pm.response.json();",
+                  "pm.test(\"Prix fige par le serveur + jeton\", function () {",
+                  "  pm.expect(body.data.enrollment.totalAmountXof).to.eql(parseInt(pm.environment.get(\"sprintPrice\")));",
+                  "  pm.expect(body.data.trackingToken).to.be.a(\"string\");",
+                  "});",
+                  "pm.environment.set(\"enrollmentId\", body.data.enrollment.id);",
+                  "pm.environment.set(\"trackingToken\", body.data.trackingToken);",
+                  "pm.environment.set(\"expectedRemainingAmount\", body.data.enrollment.totalAmountXof);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Double inscription refusee (409)",
+          "request": {
+            "description": "Meme participant + meme Sprint : 409 DUPLICATE_ENROLLMENT.",
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sprintId\": {{sprintId}},\n  \"student\": {\n    \"firstName\": \"Ibrahim\",\n    \"lastName\": \"Traore\",\n    \"email\": \"{{enrollEmail}}\",\n    \"phone\": \"+2267000000000\"\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/enrollments",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "enrollments"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 409\", function () { pm.response.to.have.status(409); });",
+                  "pm.test(\"Code DUPLICATE_ENROLLMENT\", function () {",
+                  "  pm.expect(pm.response.json().code).to.eql(\"DUPLICATE_ENROLLMENT\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sprint inexistant (404)",
+          "request": {
+            "description": "Inscription a un Sprint qui n'existe pas.",
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sprintId\": 999999,\n  \"student\": {\n    \"firstName\": \"X\",\n    \"lastName\": \"Y\",\n    \"email\": \"nope-404@example.com\",\n    \"phone\": \"+2250700000000\"\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/enrollments",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "enrollments"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test(\"Statut 404\", function () { pm.response.to.have.status(404); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Setup Sprint DRAFT",
+          "request": {
+            "description": "Cree un Sprint DRAFT (sans status) pour le test d'inscription refusee.",
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Sprint Brouillon\",\n  \"slug\": \"{{draftSlug}}\",\n  \"priceXof\": 30000,\n  \"minimumPaymentXof\": 3000,\n  \"startAt\": \"2027-03-01T09:00:00.000Z\",\n  \"endAt\": \"2027-04-01T18:00:00.000Z\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/sprints",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "sprints"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.environment.set(\"draftSlug\", \"brouillon-\" + Date.now());"]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Sprint DRAFT cree\", function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                  "  pm.expect(pm.response.json().data.status).to.eql(\"DRAFT\");",
+                  "});",
+                  "pm.environment.set(\"draftSprintId\", pm.response.json().data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Inscription Sprint inactif refusee (422)",
+          "request": {
+            "description": "Seuls les Sprints ACTIVE acceptent des inscriptions.",
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sprintId\": {{draftSprintId}},\n  \"student\": {\n    \"firstName\": \"Z\",\n    \"lastName\": \"Z\",\n    \"email\": \"draft-essai@example.com\",\n    \"phone\": \"+2250700000000\"\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/enrollments",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "enrollments"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 422\", function () { pm.response.to.have.status(422); });",
+                  "pm.test(\"Code SPRINT_NOT_ACTIVE\", function () {",
+                  "  pm.expect(pm.response.json().code).to.eql(\"SPRINT_NOT_ACTIVE\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Statut et solde avec jeton",
+          "request": {
+            "description": "GET /enrollments/:id/status + header x-tracking-token. Resume minimal avec solde.",
+            "method": "GET",
+            "header": [{ "key": "x-tracking-token", "value": "{{trackingToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/enrollments/{{enrollmentId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "enrollments", "{{enrollmentId}}", "status"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", function () { pm.response.to.have.status(200); });",
+                  "var body = pm.response.json();",
+                  "pm.test(\"Solde coherent et jamais negatif\", function () {",
+                  "  pm.expect(body.data.totalPaidXof).to.be.a(\"number\");",
+                  "  pm.expect(body.data.remainingAmountXof).to.be.at.least(0);",
+                  "  pm.expect(body.data.remainingAmountXof).to.eql(body.data.totalAmountXof - body.data.totalPaidXof);",
+                  "});",
+                  "pm.test(\"Pas de hash de jeton expose\", function () {",
+                  "  pm.expect(pm.response.text()).to.not.contain(\"trackingTokenHash\");",
+                  "});",
+                  "pm.environment.set(\"expectedRemainingAmount\", body.data.remainingAmountXof);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Jeton incorrect refuse (401)",
+          "request": {
+            "description": "Jeton long mais faux : aucune donnee exposee.",
+            "method": "GET",
+            "header": [{ "key": "x-tracking-token", "value": "fauxjetonfauxjetonfauxjeton00000000" }],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/enrollments/{{enrollmentId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "enrollments", "{{enrollmentId}}", "status"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Code TRACKING_TOKEN_INVALID\", function () {",
+                  "  pm.expect(pm.response.json().code).to.eql(\"TRACKING_TOKEN_INVALID\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Jeton absent refuse (401)",
+          "request": {
+            "description": "Sans header x-tracking-token : 401 TRACKING_TOKEN_REQUIRED.",
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/enrollments/{{enrollmentId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "enrollments", "{{enrollmentId}}", "status"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test(\"Statut 401\", function () { pm.response.to.have.status(401); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Augmenter le prix du Sprint",
+          "request": {
+            "description": "PATCH /sprints/:id {priceXof: 99999} pour tester le prix fige.",
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"priceXof\": 99999\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/sprints/{{sprintId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "sprints", "{{sprintId}}"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test(\"Statut 200\", function () { pm.response.to.have.status(200); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Prix inscription toujours fige",
+          "request": {
+            "description": "GET /admin/enrollments/:id : totalAmountXof inchange malgre la hausse du Sprint.",
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admin/enrollments/{{enrollmentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admin", "enrollments", "{{enrollmentId}}"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Prix fige conserve\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data.totalAmountXof).to.eql(parseInt(pm.environment.get(\"sprintPrice\")));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Restaurer le prix du Sprint",
+          "request": {
+            "description": "Remet priceXof a 60000 pour la suite des tests.",
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"priceXof\": 60000\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/sprints/{{sprintId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "sprints", "{{sprintId}}"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test(\"Statut 200\", function () { pm.response.to.have.status(200); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lister inscriptions (admin)",
+          "request": {
+            "description": "GET /admin/enrollments avec filtres ?sprintId=&status=&search=.",
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admin/enrollments?sprintId={{sprintId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admin", "enrollments"],
+              "query": [{ "key": "sprintId", "value": "{{sprintId}}" }]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200 et soldes inclus\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  var items = pm.response.json().data.items;",
+                  "  pm.expect(items).to.be.an(\"array\");",
+                  "  if (items.length > 0) { pm.expect(items[0].remainingAmountXof).to.be.at.least(0); }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Confirmer inscription (admin)",
+          "request": {
+            "description": "PATCH /admin/enrollments/:id/status {CONFIRMED}. Transition PENDING->CONFIRMED.",
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"CONFIRMED\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admin/enrollments/{{enrollmentId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admin", "enrollments", "{{enrollmentId}}", "status"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut CONFIRMED\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data.status).to.eql(\"CONFIRMED\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Historique versements (admin)",
+          "request": {
+            "description": "GET /admin/enrollments/:id/payments.",
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admin/enrollments/{{enrollmentId}}/payments",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admin", "enrollments", "{{enrollmentId}}", "payments"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200 et tableau\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "06 — Paiements Paystack",
+      "description": "L'initialisation positive exige Paystack (cles test + reseau) : sans cela l'API repond 503 PAYSTACK_UNAVAILABLE APRES avoir reserve la tentative PENDING. Les refus de montants (400/409) sont testes sans Paystack.",
+      "item": [
+        {
+          "name": "Initier versement partiel 10000",
+          "request": {
+            "description": "POST /payments/enrollments/:id/initialize {amountXof} + jeton. 201 + reference si Paystack OK, 503 si indisponible.",
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-tracking-token", "value": "{{trackingToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amountXof\": 10000\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/payments/enrollments/{{enrollmentId}}/initialize",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "payments", "enrollments", "{{enrollmentId}}", "initialize"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"201 ou 503 documente\", function () { pm.expect(pm.response.code).to.be.oneOf([200, 201, 503]); });",
+                  "if (pm.response.code === 503) {",
+                  "  pm.environment.set(\"paystackBlocked\", \"true\");",
+                  "  console.log(\"Paystack indisponible : parcours paiement reel non execute (voir README-Postman).\");",
+                  "} else {",
+                  "  var body = pm.response.json();",
+                  "  pm.test(\"Tentative PENDING + reference\", function () {",
+                  "    pm.expect(body.data.status).to.eql(\"PENDING\");",
+                  "    pm.expect(body.data.reference).to.be.a(\"string\");",
+                  "    pm.expect(body.data.authorizationUrl).to.be.a(\"string\");",
+                  "  });",
+                  "  pm.environment.set(\"paystackBlocked\", \"false\");",
+                  "  pm.environment.set(\"paymentReference\", body.data.reference);",
+                  "  pm.environment.set(\"paymentId\", body.data.paymentId);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Montant nul refuse (400)",
+          "request": {
+            "description": "{amountXof: 0} : 400 PAYMENT_AMOUNT_INVALID.",
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-tracking-token", "value": "{{trackingToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amountXof\": 0\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/payments/enrollments/{{enrollmentId}}/initialize",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "payments", "enrollments", "{{enrollmentId}}", "initialize"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 400\", function () {",
+                  "  pm.response.to.have.status(400);",
+                  "  pm.expect(pm.response.json().code).to.eql(\"PAYMENT_AMOUNT_INVALID\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Montant negatif refuse (400)",
+          "request": {
+            "description": "{amountXof: -5000} : 400.",
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-tracking-token", "value": "{{trackingToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amountXof\": -5000\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/payments/enrollments/{{enrollmentId}}/initialize",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "payments", "enrollments", "{{enrollmentId}}", "initialize"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test(\"Statut 400\", function () { pm.response.to.have.status(400); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sous le minimum refuse (400)",
+          "request": {
+            "description": "100 < minimum 5000 : 400 PAYMENT_AMOUNT_BELOW_MINIMUM.",
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-tracking-token", "value": "{{trackingToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amountXof\": 100\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/payments/enrollments/{{enrollmentId}}/initialize",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "payments", "enrollments", "{{enrollmentId}}", "initialize"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 400\", function () {",
+                  "  pm.response.to.have.status(400);",
+                  "  pm.expect(pm.response.json().code).to.eql(\"PAYMENT_AMOUNT_BELOW_MINIMUM\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Superieur au solde refuse (409)",
+          "request": {
+            "description": "Montant > solde restant : 409 PAYMENT_AMOUNT_EXCEEDS_BALANCE. Le solde ne devient jamais negatif.",
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-tracking-token", "value": "{{trackingToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amountXof\": 99999999\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/payments/enrollments/{{enrollmentId}}/initialize",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "payments", "enrollments", "{{enrollmentId}}", "initialize"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 409\", function () {",
+                  "  pm.response.to.have.status(409);",
+                  "  pm.expect(pm.response.json().code).to.eql(\"PAYMENT_AMOUNT_EXCEEDS_BALANCE\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Champ totalAmountXof interdit (400)",
+          "request": {
+            "description": "Le client ne peut pas imposer le total : champ non whitelist -> 400.",
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-tracking-token", "value": "{{trackingToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amountXof\": 5000,\n  \"totalAmountXof\": 1\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/payments/enrollments/{{enrollmentId}}/initialize",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "payments", "enrollments", "{{enrollmentId}}", "initialize"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test(\"Statut 400\", function () { pm.response.to.have.status(400); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Init sans jeton (401)",
+          "request": {
+            "description": "Initialisation sans x-tracking-token : 401.",
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amountXof\": 5000\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/payments/enrollments/{{enrollmentId}}/initialize",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "payments", "enrollments", "{{enrollmentId}}", "initialize"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test(\"Statut 401\", function () { pm.response.to.have.status(401); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verifier paiement (jeton)",
+          "request": {
+            "description": "GET /payments/:reference/verify. Sans Paystack : 502 PAYSTACK_VERIFY_FAILED (le retour navigateur ne confirme rien).",
+            "method": "GET",
+            "header": [{ "key": "x-tracking-token", "value": "{{trackingToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/payments/{{paymentReference}}/verify",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "payments", "{{paymentReference}}", "verify"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 ou 502 documente\", function () { pm.expect(pm.response.code).to.be.oneOf([200, 502]); });",
+                  "if (pm.response.code === 200) {",
+                  "  var body = pm.response.json();",
+                  "  pm.test(\"Solde coherent\", function () {",
+                  "    pm.expect(body.data.remainingAmountXof).to.be.at.least(0);",
+                  "    pm.expect(body.data.remainingAmountXof).to.be.at.most(parseInt(pm.environment.get(\"sprintPrice\")));",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verifier sans acces (401)",
+          "request": {
+            "description": "Ni JWT admin ni jeton : 401 TRACKING_TOKEN_REQUIRED.",
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/payments/{{paymentReference}}/verify",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "payments", "{{paymentReference}}", "verify"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test(\"401 ou 404\", function () { pm.expect(pm.response.code).to.be.oneOf([401, 404]); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lister paiements (admin)",
+          "request": {
+            "description": "GET /admin/payments?status=&enrollmentId=.",
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admin/payments?enrollmentId={{enrollmentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admin", "payments"],
+              "query": [{ "key": "enrollmentId", "value": "{{enrollmentId}}" }]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", function () { pm.response.to.have.status(200); });",
+                  "var items = pm.response.json().data.items;",
+                  "pm.test(\"References uniques\", function () {",
+                  "  var refs = items.map(function (p) { return p.reference; });",
+                  "  pm.expect(new Set(refs).size).to.eql(refs.length);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Re-verifier paiement (admin)",
+          "request": {
+            "description": "POST /admin/payments/:id/recheck. Sans Paystack : 502, jamais de marquage arbitraire.",
+            "method": "POST",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admin/payments/{{paymentId}}/recheck",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admin", "payments", "{{paymentId}}", "recheck"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 ou 502 documente\", function () { pm.expect(pm.response.code).to.be.oneOf([200, 502, 404]); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "07 — Webhooks Paystack",
+      "description": "Aucune cle secrete dans la collection : renseigner la variable d'environnement paystackWebhookSecret (type secret) en local. Sans elle, seul le rejet 400 est testable.",
+      "item": [
+        {
+          "name": "Webhook sans signature (400)",
+          "request": {
+            "description": "Signature absente : 400 INVALID_WEBHOOK_SIGNATURE, aucune ecriture.",
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"event\":\"charge.success\",\"data\":{\"reference\":\"sp_inconnue\"}}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/payments/webhook/paystack",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "payments", "webhook", "paystack"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Code signature\", function () {",
+                  "  pm.expect(pm.response.json().code).to.eql(\"INVALID_WEBHOOK_SIGNATURE\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Webhook signature invalide (400)",
+          "request": {
+            "description": "Fausse signature : 400, aucune modification financiere.",
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-paystack-signature", "value": "0badf00d0badf00d0badf00d0badf00d0badf00d0badf00d0badf00d0badf00d0badf00d0badf00d0badf00d0badf00d0badf00d" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"event\":\"charge.success\",\"data\":{\"reference\":\"sp_inconnue\"}}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/payments/webhook/paystack",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "payments", "webhook", "paystack"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 400\", function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Webhook payload malforme (400)",
+          "request": {
+            "description": "Corps non JSON + fausse signature : 400.",
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-paystack-signature", "value": "faux" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "ceci n'est pas du JSON {{{",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/payments/webhook/paystack",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "payments", "webhook", "paystack"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test(\"Statut 400\", function () { pm.response.to.have.status(400); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Webhook signe (secret requis)",
+          "request": {
+            "description": "Calcule HMAC-SHA512 du corps EXACT en pre-request avec paystackWebhookSecret (jamais journalisee). Sans secret : 400 attendu. Avec secret : l'API re-verifie chez Paystack avant toute ecriture.",
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-paystack-signature", "value": "{{computedSignature}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"event\":\"charge.success\",\"data\":{\"reference\":\"{{paymentReference}}\"}}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/payments/webhook/paystack",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "payments", "webhook", "paystack"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var secret = (pm.environment.get(\"paystackWebhookSecret\") || \"\").trim();",
+                  "if (!pm.environment.get(\"paymentReference\")) { pm.environment.set(\"paymentReference\", \"sp_inconnue\"); }",
+                  "var ref = pm.environment.get(\"paymentReference\");",
+                  "var raw = JSON.stringify({ event: \"charge.success\", data: { reference: ref } });",
+                  "if (!secret) { pm.environment.set(\"computedSignature\", \"absente\"); }",
+                  "else { pm.environment.set(\"computedSignature\", CryptoJS.HmacSHA512(raw, secret).toString(CryptoJS.enc.Hex)); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var secret = (pm.environment.get(\"paystackWebhookSecret\") || \"\").trim();",
+                  "if (!secret) {",
+                  "  pm.test(\"Sans secret : 400 documente\", function () { pm.response.to.have.status(400); });",
+                  "  console.log(\"Renseignez paystackWebhookSecret (cle test Paystack) pour le parcours signe.\");",
+                  "} else {",
+                  "  pm.test(\"Reponse documentee\", function () { pm.expect(pm.response.code).to.be.oneOf([200, 400, 502]); });",
+                  "  console.log(\"Un 200 avec processed confirme exige aussi Paystack joignable : aucun paiement reel n'est simule.\");",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "08 — Mini-dashboard",
+      "description": "Assertions en >= (jamais d'egalite stricte) : la base peut contenir d'autres donnees.",
+      "item": [
+        {
+          "name": "Resume administratif",
+          "request": {
+            "description": "GET /admin/dashboard/summary. KPI : participants, inscriptions non annulees, sprints actifs, encaisses SUCCESS, restants, en attente.",
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admin/dashboard/summary",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admin", "dashboard", "summary"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", function () { pm.response.to.have.status(200); });",
+                  "var k = pm.response.json().data;",
+                  "pm.test(\"KPI presents et coherents\", function () {",
+                  "  pm.expect(k.totalStudents).to.be.at.least(1);",
+                  "  pm.expect(k.totalEnrollments).to.be.at.least(1);",
+                  "  pm.expect(k.activeSprints).to.be.at.least(1);",
+                  "  pm.expect(k.totalCollectedXof).to.be.at.least(0);",
+                  "  pm.expect(k.totalOutstandingXof).to.be.at.least(0);",
+                  "  pm.expect(k.pendingPayments.count).to.be.at.least(0);",
+                  "  pm.expect(k.recentEnrollments).to.be.an(\"array\");",
+                  "  pm.expect(k.recentPayments).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Dernieres inscriptions",
+          "request": {
+            "description": "GET /admin/dashboard/recent-enrollments?limit=5.",
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admin/dashboard/recent-enrollments?limit=5",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admin", "dashboard", "recent-enrollments"],
+              "query": [{ "key": "limit", "value": "5" }]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200 et tableau\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Derniers paiements",
+          "request": {
+            "description": "GET /admin/dashboard/recent-payments?limit=5.",
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admin/dashboard/recent-payments?limit=5",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admin", "dashboard", "recent-payments"],
+              "query": [{ "key": "limit", "value": "5" }]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200 et tableau\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Encaissements par periode",
+          "request": {
+            "description": "GET /admin/dashboard/collections?from=&to=. Total = SUCCESS uniquement.",
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admin/dashboard/collections?from=2026-01-01",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admin", "dashboard", "collections"],
+              "query": [{ "key": "from", "value": "2026-01-01" }]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200 et structure\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  var c = pm.response.json().data;",
+                  "  pm.expect(c.totalXof).to.be.a(\"number\");",
+                  "  pm.expect(c.byDay).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Soldes a recouvrer",
+          "request": {
+            "description": "GET /admin/dashboard/outstanding-balances. Inscriptions non annulees au solde > 0.",
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admin/dashboard/outstanding-balances",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admin", "dashboard", "outstanding-balances"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200 et soldes positifs\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  var items = pm.response.json().data.items;",
+                  "  pm.expect(items).to.be.an(\"array\");",
+                  "  items.forEach(function (i) { pm.expect(i.remainingAmountXof).to.be.above(0); });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "09 — Tests de validation et erreurs",
+      "item": [
+        {
+          "name": "Setup Sprint NEG",
+          "request": {
+            "description": "Sprint ACTIVE prix 40000 / min 4000 pour les tests negatifs.",
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Sprint Negatif\",\n  \"slug\": \"{{negSlug}}\",\n  \"priceXof\": 40000,\n  \"minimumPaymentXof\": 4000,\n  \"startAt\": \"2027-05-01T09:00:00.000Z\",\n  \"endAt\": \"2027-06-01T18:00:00.000Z\",\n  \"status\": \"ACTIVE\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/sprints",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "sprints"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.environment.set(\"negSlug\", \"neg-\" + Date.now());"]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Setup OK\", function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "pm.environment.set(\"negSprintId\", pm.response.json().data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Setup inscription NEG",
+          "request": {
+            "description": "Inscription fraiche pour annulation et versement refuse.",
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sprintId\": {{negSprintId}},\n  \"student\": {\n    \"firstName\": \"Neg\",\n    \"lastName\": \"Atif\",\n    \"email\": \"{{negEmail}}\",\n    \"phone\": \"+2250700000099\"\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/enrollments",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "enrollments"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.environment.set(\"negEmail\", \"neg-\" + Date.now() + \"@example.com\");"]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Setup OK\", function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "pm.environment.set(\"negEnrollmentId\", pm.response.json().data.enrollment.id);",
+                  "pm.environment.set(\"negTrackingToken\", pm.response.json().data.trackingToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Prix nul refuse (400)",
+          "request": {
+            "description": "priceXof 0 : IsPositive -> 400.",
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"X\",\n  \"slug\": \"prix-nul-test\",\n  \"priceXof\": 0,\n  \"minimumPaymentXof\": 1,\n  \"startAt\": \"2027-01-01T09:00:00.000Z\",\n  \"endAt\": \"2027-02-01T09:00:00.000Z\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/sprints",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "sprints"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test(\"Statut 400\", function () { pm.response.to.have.status(400); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Minimum superieur au prix (400)",
+          "request": {
+            "description": "minimumPaymentXof > priceXof : 400 MINIMUM_EXCEEDS_PRICE.",
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"X\",\n  \"slug\": \"min-prix-test\",\n  \"priceXof\": 5000,\n  \"minimumPaymentXof\": 6000,\n  \"startAt\": \"2027-01-01T09:00:00.000Z\",\n  \"endAt\": \"2027-02-01T09:00:00.000Z\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/sprints",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "sprints"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 400\", function () {",
+                  "  pm.response.to.have.status(400);",
+                  "  pm.expect(pm.response.json().code).to.eql(\"MINIMUM_EXCEEDS_PRICE\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Champ inconnu refuse (400)",
+          "request": {
+            "description": "forbidNonWhitelisted : champ totalPaidXof -> 400.",
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"X\",\n  \"totalPaidXof\": 999\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/sprints/{{negSprintId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "sprints", "{{negSprintId}}"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test(\"Statut 400\", function () { pm.response.to.have.status(400); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Total impose a l'inscription (400)",
+          "request": {
+            "description": "totalAmountXof cote client : champ non whitelist -> 400.",
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sprintId\": {{negSprintId}},\n  \"totalAmountXof\": 1,\n  \"student\": {\n    \"firstName\": \"A\",\n    \"lastName\": \"B\",\n    \"email\": \"impose-total@example.com\",\n    \"phone\": \"+2250700000000\"\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/enrollments",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "enrollments"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test(\"Statut 400\", function () { pm.response.to.have.status(400); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Transition Sprint invalide (400)",
+          "request": {
+            "description": "DRAFT->COMPLETED interdit : 400 INVALID_STATUS_TRANSITION.",
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"COMPLETED\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/sprints/{{draftSprintId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "sprints", "{{draftSprintId}}", "status"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 400\", function () {",
+                  "  pm.response.to.have.status(400);",
+                  "  pm.expect(pm.response.json().code).to.eql(\"INVALID_STATUS_TRANSITION\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Suppression Sprint avec inscriptions (409)",
+          "request": {
+            "description": "DELETE refuse si des inscriptions existent : 409 SPRINT_HAS_ENROLLMENTS.",
+            "method": "DELETE",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/sprints/{{negSprintId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "sprints", "{{negSprintId}}"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 409\", function () {",
+                  "  pm.response.to.have.status(409);",
+                  "  pm.expect(pm.response.json().code).to.eql(\"SPRINT_HAS_ENROLLMENTS\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Annuler inscription (admin)",
+          "request": {
+            "description": "PATCH /admin/enrollments/:id/status {CANCELLED}. Historique conserve.",
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"CANCELLED\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admin/enrollments/{{negEnrollmentId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admin", "enrollments", "{{negEnrollmentId}}", "status"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut CANCELLED\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data.status).to.eql(\"CANCELLED\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Versement sur annulee refuse (422)",
+          "request": {
+            "description": "Aucun versement sur inscription CANCELLED : 422 ENROLLMENT_CANCELLED.",
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-tracking-token", "value": "{{negTrackingToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amountXof\": 4000\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/payments/enrollments/{{negEnrollmentId}}/initialize",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "payments", "enrollments", "{{negEnrollmentId}}", "initialize"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 422\", function () {",
+                  "  pm.response.to.have.status(422);",
+                  "  pm.expect(pm.response.json().code).to.eql(\"ENROLLMENT_CANCELLED\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cloture avec solde refusee",
+          "request": {
+            "description": "COMPLETED exige un solde nul : 400 ENROLLMENT_NOT_SETTLED (200 seulement si reellement soldee via Paystack).",
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"COMPLETED\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admin/enrollments/{{enrollmentId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admin", "enrollments", "{{enrollmentId}}", "status"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"400 ou 200 documente\", function () { pm.expect(pm.response.code).to.be.oneOf([200, 400]); });",
+                  "if (pm.response.code === 400) {",
+                  "  pm.test(\"Code ENROLLMENT_NOT_SETTLED\", function () {",
+                  "    pm.expect(pm.response.json().code).to.eql(\"ENROLLMENT_NOT_SETTLED\");",
+                  "  });",
+                  "} else { console.log(\"Inscription reellement soldee via Paystack : cloture acceptee.\"); }"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "10 — Tests de securite",
+      "item": [
+        {
+          "name": "Admin sans token (401)",
+          "request": {
+            "description": "GET /admin/sprints sans JWT : 401.",
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admin/sprints",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admin", "sprints"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test(\"Statut 401\", function () { pm.response.to.have.status(401); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Token invalide refuse (401)",
+          "request": {
+            "description": "Bearer faux sur route admin : 401.",
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "faux.token.invalide", "type": "string" }]
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admin/students",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admin", "students"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test(\"Statut 401\", function () { pm.response.to.have.status(401); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Creation Sprint sans token (401)",
+          "request": {
+            "description": "POST /sprints anonyme : 401.",
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"X\",\n  \"slug\": \"x-anon\",\n  \"priceXof\": 1000,\n  \"minimumPaymentXof\": 100,\n  \"startAt\": \"2027-01-01T09:00:00.000Z\",\n  \"endAt\": \"2027-02-01T09:00:00.000Z\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/sprints",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "sprints"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test(\"Statut 401\", function () { pm.response.to.have.status(401); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Injection SQL recherche (200 sans fuite)",
+          "request": {
+            "description": "Requetes Prisma parametrees : pas d'erreur dangereuse, reponse JSON normale.",
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admin/students?search=' OR '1'='1",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admin", "students"],
+              "query": [{ "key": "search", "value": "' OR '1'='1" }]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200 sans erreur SQL\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data.items).to.be.an(\"array\");",
+                  "  pm.expect(pm.response.text().toLowerCase()).to.not.contain(\"sql\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pagination excessive plafonnee",
+          "request": {
+            "description": "limit=10000 : reponse plafonnee a 100.",
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/sprints?limit=10000",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "sprints"],
+              "query": [{ "key": "limit", "value": "10000" }]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Limite plafonnee\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data.limit).to.be.at.most(100);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ID inexistant (404 propre)",
+          "request": {
+            "description": "GET /admin/sprints inexistant : la route detail admin n'existe pas -> 404 Nest (pas de fuite).",
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/sprints/999999",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "sprints", "999999"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Pas de stack trace\", function () {",
+                  "  pm.expect(pm.response.text()).to.not.contain(\"stack\");",
+                  "  pm.expect(pm.response.json().code).to.be.a(\"string\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Aucun secret expose (admins)",
+          "request": {
+            "description": "Ni passwordHash ni cle Paystack dans les reponses.",
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admins",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admins"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Aucun secret\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  var txt = pm.response.text();",
+                  "  pm.expect(txt).to.not.contain(\"passwordHash\");",
+                  "  pm.expect(txt).to.not.contain(\"sk_test\");",
+                  "  pm.expect(txt).to.not.contain(\"sk_live\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reference paiement inconnue (404)",
+          "request": {
+            "description": "Verify sur reference inexistante avec jeton valide : 404 PAYMENT_NOT_FOUND.",
+            "method": "GET",
+            "header": [{ "key": "x-tracking-token", "value": "{{trackingToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/payments/sp_inexistante_000/verify",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "payments", "sp_inexistante_000", "verify"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test(\"Statut 404\", function () { pm.response.to.have.status(404); });"]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "11 — Scenario complet de bout en bout",
+      "description": "Parcours : sante -> login -> sprint -> inscription -> versements -> webhook invalide sans effet -> solde -> dashboard -> historique. Paystack reel (cles test) : etapes conditionnelles 201/503, jamais de paiement simule.",
+      "item": [
+        {
+          "name": "E2E 01 Sante + init IDs",
+          "request": {
+            "description": "Sante API + generation des identifiants uniques du scenario.",
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "health"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var run = Date.now().toString();",
+                  "pm.environment.set(\"e2eRunId\", run);",
+                  "pm.environment.set(\"e2eEmail\", \"e2e-\" + run + \"@example.com\");",
+                  "pm.environment.set(\"e2eSlug\", \"e2e-sprint-\" + run);",
+                  "pm.environment.set(\"paystackBlocked\", \"false\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test(\"API disponible\", function () { pm.response.to.have.status(200); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "E2E 02 Login admin",
+          "request": {
+            "description": "Connexion et JWT pour le scenario.",
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "auth", "login"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Login OK\", function () { pm.response.to.have.status(200); });",
+                  "pm.environment.set(\"accessToken\", pm.response.json().data.accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "E2E 03 Creer Sprint",
+          "request": {
+            "description": "Sprint ACTIVE prix 50000 / min 5000 / capacite 10.",
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Sprint E2E\",\n  \"slug\": \"{{e2eSlug}}\",\n  \"priceXof\": 50000,\n  \"minimumPaymentXof\": 5000,\n  \"startAt\": \"2027-06-01T09:00:00.000Z\",\n  \"endAt\": \"2027-07-01T18:00:00.000Z\",\n  \"capacity\": 10,\n  \"status\": \"ACTIVE\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/sprints",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "sprints"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Sprint cree\", function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "pm.environment.set(\"e2eSprintId\", pm.response.json().data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "E2E 04 Inscrire participant",
+          "request": {
+            "description": "Inscription sans paiement initial (RG02). Jeton recupere.",
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sprintId\": {{e2eSprintId}},\n  \"student\": {\n    \"firstName\": \"Fatou\",\n    \"lastName\": \"Diallo\",\n    \"email\": \"{{e2eEmail}}\",\n    \"phone\": \"+224600000000\"\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/enrollments",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "enrollments"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Inscription creee\", function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "var body = pm.response.json();",
+                  "pm.test(\"Total = prix serveur\", function () { pm.expect(body.data.enrollment.totalAmountXof).to.eql(50000); });",
+                  "pm.environment.set(\"e2eEnrollmentId\", body.data.enrollment.id);",
+                  "pm.environment.set(\"e2eToken\", body.data.trackingToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "E2E 05 Solde initial",
+          "request": {
+            "description": "Solde = 50000, paye = 0.",
+            "method": "GET",
+            "header": [{ "key": "x-tracking-token", "value": "{{e2eToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/enrollments/{{e2eEnrollmentId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "enrollments", "{{e2eEnrollmentId}}", "status"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Solde initial\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data.totalPaidXof).to.eql(0);",
+                  "  pm.expect(pm.response.json().data.remainingAmountXof).to.eql(50000);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "E2E 06 Versement 1 (10000)",
+          "request": {
+            "description": "Premier versement partiel. 201 si Paystack test OK, 503 sinon (tente reservee PENDING).",
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-tracking-token", "value": "{{e2eToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amountXof\": 10000\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/payments/enrollments/{{e2eEnrollmentId}}/initialize",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "payments", "enrollments", "{{e2eEnrollmentId}}", "initialize"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"201 ou 503\", function () { pm.expect(pm.response.code).to.be.oneOf([200, 201, 503]); });",
+                  "if (pm.response.code === 503) { pm.environment.set(\"paystackBlocked\", \"true\"); }",
+                  "else { pm.environment.set(\"e2eRef1\", pm.response.json().data.reference); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "E2E 07 PENDING non comptabilise",
+          "request": {
+            "description": "Un PENDING ne modifie pas le total encaisse (RG05).",
+            "method": "GET",
+            "header": [{ "key": "x-tracking-token", "value": "{{e2eToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/enrollments/{{e2eEnrollmentId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "enrollments", "{{e2eEnrollmentId}}", "status"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Encaisse toujours 0\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data.totalPaidXof).to.eql(0);",
+                  "  pm.expect(pm.response.json().data.remainingAmountXof).to.eql(50000);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "E2E 08 Versement 2 (15000)",
+          "request": {
+            "description": "Deuxieme versement partiel.",
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-tracking-token", "value": "{{e2eToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amountXof\": 15000\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/payments/enrollments/{{e2eEnrollmentId}}/initialize",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "payments", "enrollments", "{{e2eEnrollmentId}}", "initialize"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"201 ou 503\", function () { pm.expect(pm.response.code).to.be.oneOf([200, 201, 503]); });",
+                  "if (pm.response.code === 503) { pm.environment.set(\"paystackBlocked\", \"true\"); }",
+                  "else { pm.environment.set(\"e2eRef2\", pm.response.json().data.reference); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "E2E 09 Webhook invalide sans effet",
+          "request": {
+            "description": "Fausse signature : 400 puis solde inchange (RG10).",
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-paystack-signature", "value": "invalide" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"event\":\"charge.success\",\"data\":{\"reference\":\"{{e2eRef1}}\"}}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/payments/webhook/paystack",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "payments", "webhook", "paystack"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test(\"Rejet 400\", function () { pm.response.to.have.status(400); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "E2E 10 Solde inchange apres webhook",
+          "request": {
+            "description": "Le webhook invalide n'a rien comptabilise : paye = 0.",
+            "method": "GET",
+            "header": [{ "key": "x-tracking-token", "value": "{{e2eToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/enrollments/{{e2eEnrollmentId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "enrollments", "{{e2eEnrollmentId}}", "status"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Toujours 0 encaisse\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data.totalPaidXof).to.eql(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "E2E 11 Depassement refuse (409)",
+          "request": {
+            "description": "60000 > solde 50000 : 409.",
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-tracking-token", "value": "{{e2eToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amountXof\": 60000\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/payments/enrollments/{{e2eEnrollmentId}}/initialize",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "payments", "enrollments", "{{e2eEnrollmentId}}", "initialize"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test(\"Statut 409\", function () { pm.response.to.have.status(409); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "E2E 12 Reglement du solde (Paystack)",
+          "request": {
+            "description": "Versement du solde restant 50000. Sans Paystack : 503 attendu, scenario confine au PENDING (aucun succes simule).",
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-tracking-token", "value": "{{e2eToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amountXof\": 50000\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/payments/enrollments/{{e2eEnrollmentId}}/initialize",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "payments", "enrollments", "{{e2eEnrollmentId}}", "initialize"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"201/503/409 documente\", function () { pm.expect(pm.response.code).to.be.oneOf([200, 201, 409, 503]); });",
+                  "if (pm.response.code === 503) { console.log(\"Sans Paystack : le reglement complet reste PENDING, solde non nul. Suite manuelle avec cles test.\"); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "E2E 13 Dashboard apres scenario",
+          "request": {
+            "description": "L'inscription E2E apparait dans les soldes a recouvrer (50000 tant que rien n'est confirme).",
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admin/dashboard/summary",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admin", "dashboard", "summary"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", function () { pm.response.to.have.status(200); });",
+                  "var k = pm.response.json().data;",
+                  "pm.test(\"Chiffres reels\", function () {",
+                  "  pm.expect(k.totalEnrollments).to.be.at.least(1);",
+                  "  pm.expect(k.totalOutstandingXof).to.be.at.least(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "E2E 14 Historique complet",
+          "request": {
+            "description": "Toutes les tentatives (PENDING) sont conservees avec references uniques.",
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admin/enrollments/{{e2eEnrollmentId}}/payments",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admin", "enrollments", "{{e2eEnrollmentId}}", "payments"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Statut 200\", function () { pm.response.to.have.status(200); });",
+                  "var items = pm.response.json().data;",
+                  "pm.test(\"Historique trace\", function () {",
+                  "  pm.expect(items).to.be.an(\"array\");",
+                  "  pm.expect(items.length).to.be.at.least(1);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

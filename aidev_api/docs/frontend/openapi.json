@@ -1,0 +1,603 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "API Sprints de formation",
+    "version": "1.0",
+    "description": "Inscriptions et versements partiels (Paystack, XOF). Genere a partir du code (src/). Base: https://aidev.you-soft.com/api/v1."
+  },
+  "servers": [
+    { "url": "https://aidev.you-soft.com/api/v1", "description": "Production" },
+    { "url": "http://localhost:3000/api/v1", "description": "Local" }
+  ],
+  "security": [],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": ["health"],
+        "summary": "Liveness + etat Postgres",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "status": { "type": "string", "example": "ok" },
+                        "db": { "type": "string", "example": "up" },
+                        "time": { "type": "string", "format": "date-time" }
+                      }
+                    },
+                    "meta": { "type": "object" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "tags": ["auth"],
+        "summary": "Connexion admin (publique, 10/min)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/LoginDto" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "accessToken + admin", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoginResponse" } } } },
+          "401": { "description": "INVALID_CREDENTIALS", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "tags": ["auth"],
+        "summary": "Profil admin courant",
+        "security": [{ "jwt": [] }],
+        "responses": {
+          "200": { "description": "admin", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } },
+          "401": { "description": "UNAUTHORIZED", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/auth/change-password": {
+      "post": {
+        "tags": ["auth"],
+        "summary": "Changement de mot de passe",
+        "security": [{ "jwt": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ChangePasswordDto" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "admin", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } },
+          "401": { "description": "INVALID_CURRENT_PASSWORD", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/admins": {
+      "get": {
+        "tags": ["admins"],
+        "summary": "Liste des admins",
+        "security": [{ "jwt": [] }],
+        "responses": { "200": { "description": "liste", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } } }
+      },
+      "post": {
+        "tags": ["admins"],
+        "summary": "Creer un admin",
+        "security": [{ "jwt": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateAdminDto" }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "cree", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } },
+          "409": { "description": "ADMIN_EMAIL_EXISTS", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/admins/{id}": {
+      "get": {
+        "tags": ["admins"],
+        "summary": "Detail admin",
+        "security": [{ "jwt": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/IdParam" }],
+        "responses": { "200": { "description": "fiche", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } }, "404": { "description": "ADMIN_NOT_FOUND", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } } }
+      },
+      "patch": {
+        "tags": ["admins"],
+        "summary": "Maj admin",
+        "security": [{ "jwt": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/IdParam" }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateAdminDto" } } }
+        },
+        "responses": { "200": { "description": "fiche", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } } }
+      }
+    },
+    "/admins/{id}/disable": {
+      "patch": {
+        "tags": ["admins"],
+        "summary": "Desactiver un admin",
+        "security": [{ "jwt": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/IdParam" }],
+        "responses": { "200": { "description": "fiche", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } } }
+      }
+    },
+    "/students": {
+      "post": {
+        "tags": ["students"],
+        "summary": "Inscrire/retrouver un participant (publique, 20/min)",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StudentInputDto" } } }
+        },
+        "responses": { "201": { "description": "{ student, created }", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } } }
+      }
+    },
+    "/admin/students": {
+      "get": {
+        "tags": ["students"],
+        "summary": "Liste admin des participants",
+        "security": [{ "jwt": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/PageParam" },
+          { "$ref": "#/components/parameters/LimitParam" },
+          { "name": "search", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "page", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Page" } } } } }
+      }
+    },
+    "/admin/students/{id}": {
+      "get": {
+        "tags": ["students"],
+        "summary": "Detail participant",
+        "security": [{ "jwt": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/IdParam" }],
+        "responses": { "200": { "description": "fiche", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } } }
+      },
+      "patch": {
+        "tags": ["students"],
+        "summary": "Maj participant (sans email)",
+        "security": [{ "jwt": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/IdParam" }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateStudentDto" } } }
+        },
+        "responses": { "200": { "description": "fiche", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } } }
+      }
+    },
+    "/admin/students/{id}/enrollments": {
+      "get": {
+        "tags": ["students"],
+        "summary": "Historique des inscriptions",
+        "security": [{ "jwt": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/IdParam" }],
+        "responses": { "200": { "description": "liste", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } } }
+      }
+    },
+    "/sprints": {
+      "get": {
+        "tags": ["sprints"],
+        "summary": "Catalogue public (ACTIVE uniquement)",
+        "parameters": [
+          { "$ref": "#/components/parameters/PageParam" },
+          { "$ref": "#/components/parameters/LimitParam" }
+        ],
+        "responses": { "200": { "description": "page", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Page" } } } } }
+      },
+      "post": {
+        "tags": ["sprints"],
+        "summary": "Creer un sprint",
+        "security": [{ "jwt": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateSprintDto" } } }
+        },
+        "responses": { "201": { "description": "cree", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } } }
+      }
+    },
+    "/admin/sprints": {
+      "get": {
+        "tags": ["sprints"],
+        "summary": "Liste admin (filtre status)",
+        "security": [{ "jwt": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/PageParam" },
+          { "$ref": "#/components/parameters/LimitParam" },
+          { "name": "status", "in": "query", "schema": { "$ref": "#/components/schemas/SprintStatus" } }
+        ],
+        "responses": { "200": { "description": "page", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Page" } } } } }
+      }
+    },
+    "/sprints/{id}": {
+      "get": {
+        "tags": ["sprints"],
+        "summary": "Detail public (ACTIVE uniquement)",
+        "parameters": [{ "$ref": "#/components/parameters/IdParam" }],
+        "responses": { "200": { "description": "fiche", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } }, "404": { "description": "NOT_FOUND", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } } }
+      },
+      "patch": {
+        "tags": ["sprints"],
+        "summary": "Maj sprint (sans slug/status)",
+        "security": [{ "jwt": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/IdParam" }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateSprintDto" } } }
+        },
+        "responses": { "200": { "description": "fiche", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } } }
+      },
+      "delete": {
+        "tags": ["sprints"],
+        "summary": "Supprimer (refuse si inscriptions)",
+        "security": [{ "jwt": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/IdParam" }],
+        "responses": { "200": { "description": "supprime", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } }, "409": { "description": "HAS_ENROLLMENTS", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } } }
+      }
+    },
+    "/sprints/{id}/status": {
+      "patch": {
+        "tags": ["sprints"],
+        "summary": "Changer le statut",
+        "security": [{ "jwt": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/IdParam" }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "required": ["status"], "properties": { "status": { "$ref": "#/components/schemas/SprintStatus" } } } } }
+        },
+        "responses": { "200": { "description": "fiche", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } } }
+      }
+    },
+    "/enrollments": {
+      "post": {
+        "tags": ["enrollments"],
+        "summary": "Creer une inscription (publique, 20/min)",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateEnrollmentDto" } } }
+        },
+        "responses": { "201": { "description": "{ enrollment, trackingToken }", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } } }
+      }
+    },
+    "/admin/enrollments": {
+      "get": {
+        "tags": ["enrollments"],
+        "summary": "Liste admin",
+        "security": [{ "jwt": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/PageParam" },
+          { "$ref": "#/components/parameters/LimitParam" },
+          { "name": "sprintId", "in": "query", "schema": { "type": "integer" } },
+          { "name": "status", "in": "query", "schema": { "$ref": "#/components/schemas/EnrollmentStatus" } },
+          { "name": "search", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "page", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Page" } } } } }
+      }
+    },
+    "/admin/enrollments/{id}": {
+      "get": {
+        "tags": ["enrollments"],
+        "summary": "Detail admin",
+        "security": [{ "jwt": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/IdParam" }],
+        "responses": { "200": { "description": "detail + soldes", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } } }
+      }
+    },
+    "/enrollments/{id}/status": {
+      "get": {
+        "tags": ["enrollments"],
+        "summary": "Suivi participant (jeton de suivi)",
+        "security": [{ "tracking-token": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/IdParam" }],
+        "responses": { "200": { "description": "resume + soldes", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } } }
+      }
+    },
+    "/admin/enrollments/{id}/status": {
+      "patch": {
+        "tags": ["enrollments"],
+        "summary": "Changer le statut",
+        "security": [{ "jwt": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/IdParam" }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "required": ["status"], "properties": { "status": { "$ref": "#/components/schemas/EnrollmentStatus" } } } } }
+        },
+        "responses": { "200": { "description": "inscription", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } } }
+      }
+    },
+    "/admin/enrollments/{id}/payments": {
+      "get": {
+        "tags": ["enrollments"],
+        "summary": "Paiements d'une inscription",
+        "security": [{ "jwt": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/IdParam" }],
+        "responses": { "200": { "description": "liste", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } } }
+      }
+    },
+    "/payments/enrollments/{id}/initialize": {
+      "post": {
+        "tags": ["payments"],
+        "summary": "Initialiser un versement (jeton de suivi)",
+        "security": [{ "tracking-token": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/IdParam" }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/InitializePaymentDto" } } }
+        },
+        "responses": { "201": { "description": "{ paymentId, reference, status, authorizationUrl }", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } } }
+      }
+    },
+    "/payments/{reference}/verify": {
+      "get": {
+        "tags": ["payments"],
+        "summary": "Verification serveur (admin ou suivi)",
+        "parameters": [{ "name": "reference", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "paiement + soldes", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } } }
+      }
+    },
+    "/payments/webhook/paystack": {
+      "post": {
+        "tags": ["payments-webhook"],
+        "summary": "Webhook Paystack (signature HMAC-SHA512)",
+        "responses": { "200": { "description": "{ data, meta }", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } } }
+      }
+    },
+    "/admin/payments": {
+      "get": {
+        "tags": ["payments"],
+        "summary": "Liste admin des paiements",
+        "security": [{ "jwt": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/PageParam" },
+          { "$ref": "#/components/parameters/LimitParam" },
+          { "name": "enrollmentId", "in": "query", "schema": { "type": "integer" } },
+          { "name": "status", "in": "query", "schema": { "$ref": "#/components/schemas/PaymentStatus" } },
+          { "name": "reference", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "page", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Page" } } } } }
+      }
+    },
+    "/admin/payments/{id}": {
+      "get": {
+        "tags": ["payments"],
+        "summary": "Detail paiement",
+        "security": [{ "jwt": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/IdParam" }],
+        "responses": { "200": { "description": "fiche", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } } }
+      }
+    },
+    "/admin/payments/{id}/recheck": {
+      "post": {
+        "tags": ["payments"],
+        "summary": "Re-verifier aupres de Paystack",
+        "security": [{ "jwt": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/IdParam" }],
+        "responses": { "200": { "description": "paiement", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } } }
+      }
+    },
+    "/admin/dashboard/summary": {
+      "get": {
+        "tags": ["dashboard"],
+        "summary": "Agregats dashboard",
+        "security": [{ "jwt": [] }],
+        "responses": { "200": { "description": "synthese", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } } }
+      }
+    },
+    "/admin/dashboard/recent-enrollments": {
+      "get": {
+        "tags": ["dashboard"],
+        "summary": "Inscriptions recentes (limit 1-50)",
+        "security": [{ "jwt": [] }],
+        "parameters": [{ "name": "limit", "in": "query", "schema": { "type": "integer", "default": 10 } }],
+        "responses": { "200": { "description": "liste", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } } }
+      }
+    },
+    "/admin/dashboard/recent-payments": {
+      "get": {
+        "tags": ["dashboard"],
+        "summary": "Paiements recents (limit 1-50)",
+        "security": [{ "jwt": [] }],
+        "parameters": [{ "name": "limit", "in": "query", "schema": { "type": "integer", "default": 10 } }],
+        "responses": { "200": { "description": "liste", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } } }
+      }
+    },
+    "/admin/dashboard/collections": {
+      "get": {
+        "tags": ["dashboard"],
+        "summary": "Encaissements SUCCESS + byDay 30j",
+        "security": [{ "jwt": [] }],
+        "parameters": [
+          { "name": "from", "in": "query", "schema": { "type": "string", "format": "date" } },
+          { "name": "to", "in": "query", "schema": { "type": "string", "format": "date" } }
+        ],
+        "responses": { "200": { "description": "agregats", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } } }
+      }
+    },
+    "/admin/dashboard/outstanding-balances": {
+      "get": {
+        "tags": ["dashboard"],
+        "summary": "Soldes restants (non-annulees)",
+        "security": [{ "jwt": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/PageParam" },
+          { "$ref": "#/components/parameters/LimitParam" }
+        ],
+        "responses": { "200": { "description": "page", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Page" } } } } }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "jwt": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT" },
+      "tracking-token": { "type": "apiKey", "name": "x-tracking-token", "in": "header" }
+    },
+    "parameters": {
+      "IdParam": { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } },
+      "PageParam": { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+      "LimitParam": { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 20 } }
+    },
+    "schemas": {
+      "Envelope": {
+        "type": "object",
+        "properties": {
+          "data": {},
+          "meta": { "type": "object" }
+        }
+      },
+      "Page": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "items": { "type": "array", "items": {} },
+              "total": { "type": "integer" },
+              "page": { "type": "integer" },
+              "limit": { "type": "integer" }
+            }
+          },
+          "meta": { "type": "object" }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["statusCode", "code", "message"],
+        "properties": {
+          "statusCode": { "type": "integer", "example": 404 },
+          "code": { "type": "string", "example": "SPRINT_NOT_FOUND" },
+          "message": { "type": "string", "example": "Sprint introuvable." }
+        }
+      },
+      "LoginDto": {
+        "type": "object",
+        "required": ["email", "password"],
+        "properties": {
+          "email": { "type": "string", "format": "email" },
+          "password": { "type": "string" }
+        }
+      },
+      "LoginResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "accessToken": { "type": "string" },
+              "expiresIn": { "type": "string", "example": "1h" },
+              "admin": { "type": "object" }
+            }
+          },
+          "meta": { "type": "object" }
+        }
+      },
+      "ChangePasswordDto": {
+        "type": "object",
+        "required": ["currentPassword", "newPassword"],
+        "properties": {
+          "currentPassword": { "type": "string" },
+          "newPassword": { "type": "string", "minLength": 8, "maxLength": 128 }
+        }
+      },
+      "CreateAdminDto": {
+        "type": "object",
+        "required": ["name", "email", "password"],
+        "properties": {
+          "name": { "type": "string", "maxLength": 150 },
+          "email": { "type": "string", "format": "email" },
+          "password": { "type": "string", "minLength": 8, "maxLength": 128 }
+        }
+      },
+      "UpdateAdminDto": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "maxLength": 150 },
+          "email": { "type": "string", "format": "email" },
+          "isActive": { "type": "boolean" }
+        }
+      },
+      "StudentInputDto": {
+        "type": "object",
+        "required": ["firstName", "lastName", "email", "phone"],
+        "properties": {
+          "firstName": { "type": "string", "maxLength": 100 },
+          "lastName": { "type": "string", "maxLength": 100 },
+          "email": { "type": "string", "format": "email" },
+          "phone": { "type": "string", "pattern": "^\\+[1-9]\\d{6,17}$", "example": "+2250700000000" }
+        }
+      },
+      "UpdateStudentDto": {
+        "type": "object",
+        "properties": {
+          "firstName": { "type": "string", "maxLength": 100 },
+          "lastName": { "type": "string", "maxLength": 100 },
+          "phone": { "type": "string" }
+        }
+      },
+      "SprintStatus": { "type": "string", "enum": ["DRAFT", "ACTIVE", "INACTIVE", "COMPLETED"] },
+      "EnrollmentStatus": { "type": "string", "enum": ["PENDING", "CONFIRMED", "CANCELLED", "COMPLETED"] },
+      "PaymentStatus": { "type": "string", "enum": ["PENDING", "SUCCESS", "FAILED", "ABANDONED"] },
+      "CreateSprintDto": {
+        "type": "object",
+        "required": ["name", "slug", "priceXof", "minimumPaymentXof", "startAt", "endAt"],
+        "properties": {
+          "name": { "type": "string", "maxLength": 150 },
+          "slug": { "type": "string", "maxLength": 190 },
+          "description": { "type": "string", "nullable": true },
+          "priceXof": { "type": "integer", "minimum": 1 },
+          "minimumPaymentXof": { "type": "integer", "minimum": 1 },
+          "startAt": { "type": "string", "format": "date-time" },
+          "endAt": { "type": "string", "format": "date-time" },
+          "capacity": { "type": "integer", "minimum": 1, "nullable": true },
+          "status": { "$ref": "#/components/schemas/SprintStatus" }
+        }
+      },
+      "UpdateSprintDto": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "maxLength": 150 },
+          "description": { "type": "string" },
+          "priceXof": { "type": "integer", "minimum": 1 },
+          "minimumPaymentXof": { "type": "integer", "minimum": 1 },
+          "startAt": { "type": "string", "format": "date-time" },
+          "endAt": { "type": "string", "format": "date-time" },
+          "capacity": { "type": "integer", "minimum": 1, "nullable": true }
+        }
+      },
+      "CreateEnrollmentDto": {
+        "type": "object",
+        "required": ["sprintId", "student"],
+        "properties": {
+          "sprintId": { "type": "integer", "minimum": 1 },
+          "student": { "$ref": "#/components/schemas/StudentInputDto" }
+        }
+      },
+      "InitializePaymentDto": {
+        "type": "object",
+        "required": ["amountXof"],
+        "properties": {
+          "amountXof": { "type": "integer", "minimum": 1 }
+        }
+      }
+    }
+  }
+}
