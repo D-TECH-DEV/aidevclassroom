@@ -1,0 +1,62 @@
+
+# Production aidev_api — PAS de service postgres ici : l'API rejoint le
+# PostgreSQL existant du VPS via un reseau Docker externe (nom a renseigner
+# apres diagnostic, voir docs/prod-deploy.md, jamais de valeur inventee).
+#
+# Fichier d'environnement NON versionne a creer sur le VPS : .env.prod
+# (modele : .env.example). Ne jamais committer .env.prod.
+name: aidev-api
+
+services:
+  migrate:
+    build: .
+    # Applique les migrations une seule fois, avant l'API (pas de
+    # `migrate deploy` concurrent). Service one-shot : ne redemarre pas.
+    command: ["sh", "-c", "npx prisma migrate deploy"]
+    # DATABASE_URL vient UNIQUEMENT de .env.prod (pas d'interpolation :
+    # un .env local parasite ne doit jamais fuiter en production).
+    env_file: .env.prod
+    networks:
+      - appnet
+    restart: "no"
+    # Profil implicite : ce service ne tourne qu'appele par le script ou
+    # entraine par la dependance de `api` (completed_successfully).
+
+  api:
+    build: .
+    image: aidev-api:${API_VERSION:-latest}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    env_file: .env.prod
+    environment:
+      NODE_ENV: production
+    # Pas de `ports:` : le reverse proxy existant dialogue avec l'API sur
+    # le reseau prive. Ne publier un port que pour un diagnostic temporaire.
+    expose:
+      - "3000"
+    networks:
+      - appnet
+    restart: unless-stopped
+    healthcheck:
+      # wget (busybox) est present dans node:22-alpine ; $PORT respecte .env.prod.
+      test: ["CMD-SHELL", "wget -qO- http://localhost:$${PORT:-3000}/api/v1/health | grep -q '\"status\":\"ok\"'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # Decommentez pour brancher un reverse proxy existant :
+    # - Traefik : ajoutez vos labels ici (Host, TLS).
+    # - Nginx : pointez un `proxy_pass http://aidev-api:3000;` via le reseau appnet.
+
+networks:
+  # Renseignez PROXY_NETWORK avec le reseau REEL du VPS (diagnostic requis).
+  # Exemple : PROXY_NETWORK=reverse-proxy docker compose -f docker-compose.prod.yml up -d
+  appnet:
+    name: ${PROXY_NETWORK:-vps-proxy-RENSIGNER}
+    external: true
