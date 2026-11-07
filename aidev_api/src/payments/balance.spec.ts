@@ -47,6 +47,29 @@ describe('Soldes et montants (RG03/RG05/RG06)', () => {
     expect(validatePaymentAmount(5000, 5000, 50000)).toBeNull();
   });
 
+  it('suit les versements partiels jusqu au solde : 10000 puis 15000 puis 25000', () => {
+    // Prix fige de l inscription : 50 000 XOF.
+    const total = 50000;
+    let payments: { status: string; amountXof: number }[] = [];
+    expect(remainingAmountXof(total, payments)).toBe(50000);
+    // Premier versement partiel confirme.
+    payments = [...payments, { status: 'SUCCESS', amountXof: 10000 }];
+    expect(totalPaidXof(payments)).toBe(10000);
+    expect(remainingAmountXof(total, payments)).toBe(40000);
+    // Deuxieme versement partiel confirme.
+    payments = [...payments, { status: 'SUCCESS', amountXof: 15000 }];
+    expect(totalPaidXof(payments)).toBe(25000);
+    expect(remainingAmountXof(total, payments)).toBe(25000);
+    // Paiement du solde restant exact.
+    payments = [...payments, { status: 'SUCCESS', amountXof: 25000 }];
+    expect(totalPaidXof(payments)).toBe(50000);
+    expect(remainingAmountXof(total, payments)).toBe(0);
+    // Inscription soldee : tout nouveau versement est refuse.
+    expect(
+      validatePaymentAmount(5000, 5000, remainingAmountXof(total, payments)),
+    ).toBe('ENROLLMENT_ALREADY_SETTLED');
+  });
+
   it('refuse un montant superieur au solde et le solde ne devient jamais negatif', () => {
     expect(validatePaymentAmount(40001, 5000, 40000)).toBe(
       'PAYMENT_AMOUNT_EXCEEDS_BALANCE',

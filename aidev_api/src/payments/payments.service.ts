@@ -30,6 +30,19 @@ function newReference(): string {
   return `sp_${Date.now().toString(36)}_${randomBytes(12).toString('hex')}`;
 }
 
+/**
+ * Duree (minutes) pendant laquelle un paiement PENDING reserve le solde.
+ * Au-dela, la reservation expire : un participant qui a abandonne son
+ * checkout Paystack ne bloque plus les versements suivants (le PENDING
+ * expire reste re-verifiable via /verify ou le webhook s'il a ete paye).
+ * Surchargable via PAYSTACK_PENDING_RESERVE_MINUTES.
+ */
+const DEFAULT_PENDING_RESERVE_MINUTES = 120;
+
+function pendingReserveCutoff(reserveMinutes: number): Date {
+  return new Date(Date.now() - reserveMinutes * 60_000);
+}
+
 @Injectable()
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
@@ -52,10 +65,12 @@ export class PaymentsService {
 
   /**
    * Initialisation d'un versement (RG03/RG06/RG08).
-   * Anti-depassement concurrent : la verification du solde et la creation
-   * PENDING ont lieu dans une transaction ; les PENDING existants sont
+   * Anti-depassement concurrent : la ligne d'inscription est verrouillee
+   * (SELECT ... FOR UPDATE) puis la verification du solde et la creation
+   * PENDING ont lieu dans la meme transaction. Les PENDING recents sont
    * comptes comme reserves pour empecher deux initialisations simultanees
-   * de depasser le solde.
+   * de depasser le solde ; les PENDING expires (checkout abandonne) ne
+   * reservent plus rien mais restent re-verifiables.
    */
   async initialize(enrollmentId: number, amountXof: number) {
     const errEarly =
@@ -112,15 +127,24 @@ export class PaymentsService {
     let payment: Payment;
     try {
       payment = await this.prisma.$transaction(async (tx) => {
+        // Verrouille l'inscription : deux initialisations concurrentes
+        // se succedent ici au lieu de lire le meme solde (RG06).
+        await tx.$queryRaw`
+          SELECT "id" FROM "enrollments" WHERE "id" = ${enrollmentId} FOR UPDATE
+        `;
         const fresh = await tx.payment.findMany({
           where: { enrollmentId },
-          select: { status: true, amountXof: true },
+          select: { status: true, amountXof: true, createdAt: true },
         });
+        const reserveMinutes =
+          Number(this.config.get<string>('PAYSTACK_PENDING_RESERVE_MINUTES')) ||
+          DEFAULT_PENDING_RESERVE_MINUTES;
+        const cutoff = pendingReserveCutoff(reserveMinutes);
         const success = fresh
           .filter((p) => p.status === 'SUCCESS')
           .reduce((s, p) => s + p.amountXof, 0);
         const reserved = fresh
-          .filter((p) => p.status === 'PENDING')
+          .filter((p) => p.status === 'PENDING' && p.createdAt >= cutoff)
           .reduce((s, p) => s + p.amountXof, 0);
         const available = enrollment.totalAmountXof - success - reserved;
         if (amountXof > available) {

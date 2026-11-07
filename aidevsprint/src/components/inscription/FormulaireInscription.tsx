@@ -188,9 +188,19 @@ function Champ({
   );
 }
 
-/** Ce que l'API renvoie à la création d'une inscription. */
+/**
+ * Ce que l'API renvoie à la création d'une inscription. L'inscription
+ * embarque son sprint (voir `include` côté API) : c'est de lui que vient
+ * le minimum de versement qui fait foi, pas du catalogue.
+ */
 type ReponseInscription = {
-  enrollment: { id: number; status: string; totalAmountXof: number };
+  enrollment: {
+    id: number;
+    status: string;
+    /** Le prix figé au moment de la réservation : seule valeur à payer. */
+    totalAmountXof: number;
+    sprint?: { minimumPaymentXof?: number } | null;
+  };
   trackingToken: string;
 };
 
@@ -198,12 +208,18 @@ type ReponseInscription = {
  * Ce qu'on garde d'une inscription réussie, le temps de proposer le
  * paiement. Le jeton ne transite que par la mémoire de l'onglet et par
  * `localStorage` — jamais par l'adresse.
+ *
+ * `totalXof` et `minimumXof` viennent de la réponse serveur, jamais du
+ * catalogue : si le prix a changé entre l'affichage du catalogue et la
+ * réservation, c'est le total figé qui fait foi.
  */
 type Confirmee = {
   id: number;
   jeton: string;
   prenom: string;
   email: string;
+  totalXof: number;
+  minimumXof: number;
 };
 
 /**
@@ -346,6 +362,12 @@ export function FormulaireInscription({ edition }: { edition: Edition }) {
         jeton: trackingToken,
         prenom: valeurs.prenom.trim(),
         email: valeurs.email.trim().toLowerCase(),
+        // Le total figé par le serveur fait foi, pas le prix du
+        // catalogue (qui a pu changer entre-temps). Repli sur le
+        // catalogue si la réponse ne porte pas le sprint.
+        totalXof: enrollment.totalAmountXof,
+        minimumXof:
+          enrollment.sprint?.minimumPaymentXof ?? edition.minimumFCFA,
       });
       setValeurs(VIDE);
       setEtat("ok");
@@ -422,9 +444,12 @@ export function FormulaireInscription({ edition }: { edition: Edition }) {
   if (etat === "ok" && confirmee) {
     // 30 % pour réserver, ou le total d'un coup. `null` quand 30 %
     // passe sous le minimum du sprint : il ne reste que le total.
+    // Les deux montants viennent de l'inscription figée côté serveur
+    // (`confirmee`), jamais du catalogue : un prix modifié entre
+    // l'affichage et la réservation ne doit pas fausser le versement.
     const acompte = acompteReservation(
-      edition.prixFCFA,
-      edition.minimumFCFA,
+      confirmee.totalXof,
+      confirmee.minimumXof,
     );
 
     return (
@@ -439,7 +464,7 @@ export function FormulaireInscription({ edition }: { edition: Edition }) {
         </p>
         <p className="text-body text-fg/70">
           Ta place est retenue. Elle est confirmée une fois les{" "}
-          {edition.prixFCFA.toLocaleString("fr-FR")} FCFA réglés — tu peux
+          {confirmee.totalXof.toLocaleString("fr-FR")} FCFA réglés — tu peux
           réserver avec 30 % et payer le reste plus tard.
         </p>
 
@@ -463,7 +488,7 @@ export function FormulaireInscription({ edition }: { edition: Edition }) {
 
         <button
           type="button"
-          onClick={() => void paie(edition.prixFCFA)}
+          onClick={() => void paie(confirmee.totalXof)}
           disabled={paiementEnCours}
           className="inline-flex w-full items-center justify-center rounded-pill
                      border border-fg/20 px-10 py-[clamp(0.75rem,2.4svh,1.375rem)]
@@ -473,7 +498,7 @@ export function FormulaireInscription({ edition }: { edition: Edition }) {
         >
           {paiementEnCours
             ? "Ouverture du paiement…"
-            : `Tout payer — ${edition.prixFCFA.toLocaleString("fr-FR")} FCFA`}
+            : `Tout payer — ${confirmee.totalXof.toLocaleString("fr-FR")} FCFA`}
         </button>
 
         {erreurPaiement && (

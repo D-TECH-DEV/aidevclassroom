@@ -22,26 +22,38 @@ export interface PaystackVerifyData {
 }
 
 /**
- * Hypothese documentee (CDC section 2) : pour XOF, Paystack attend le
- * montant en unite entiere (francs, sans sous-unite) — aucun facteur 100
- * arbitraire. Pour les devises a sous-unites (NGN/GHS/ZAR/KES), Paystack
- * attend les centimes (kobo/pesewas/cents), d'ou x100. Toute la conversion
- * est isolee ici via toProviderAmount/fromProviderAmount.
+ * Conversion isolee (CDC section 2 + RG08) : Paystack attend TOUS les
+ * montants en plus petite unite, facteur x100, y compris pour les devises
+ * sans sous-unite en circulation comme le XOF.
+ *
+ * Source : documentation officielle Paystack (API Reference, "Supported
+ * currency") : "Sending an amount in subunits simply means multiplying
+ * the base amount by 100. While there is no subunit for XOF, developers
+ * must multiply the amount by 100 regardless."
+ *
+ * Sans ce facteur, Paystack debite 100x moins que le prix reel (ex. un
+ * versement de 50 000 XOF n'est facture que 500 XOF) tandis que la
+ * verification comparerait deux echelles incoherentes. Toute la
+ * conversion passe par toProviderAmount/fromProviderAmount et nulle part
+ * ailleurs.
  */
-export function toProviderAmount(amountXof: number, currency: string): number {
-  const subUnitCurrencies = new Set(['NGN', 'GHS', 'ZAR', 'KES', 'USD']);
-  if (subUnitCurrencies.has(currency.toUpperCase())) return amountXof * 100;
-  return amountXof;
+export function toProviderAmount(amountXof: number, _currency: string): number {
+  void _currency;
+  if (!Number.isInteger(amountXof) || amountXof <= 0) {
+    throw new Error('PAYSTACK_AMOUNT_INVALID');
+  }
+  return amountXof * 100;
 }
 
 export function fromProviderAmount(
   providerAmount: number,
-  currency: string,
+  _currency: string,
 ): number {
-  const subUnitCurrencies = new Set(['NGN', 'GHS', 'ZAR', 'KES', 'USD']);
-  if (subUnitCurrencies.has(currency.toUpperCase()))
-    return Math.round(providerAmount / 100);
-  return providerAmount;
+  void _currency;
+  if (!Number.isInteger(providerAmount) || providerAmount < 0) {
+    throw new Error('PAYSTACK_AMOUNT_INVALID');
+  }
+  return Math.round(providerAmount / 100);
 }
 
 /** Expurge la reponse fournisseur avant stockage (RG10, RG16, logs surs). */

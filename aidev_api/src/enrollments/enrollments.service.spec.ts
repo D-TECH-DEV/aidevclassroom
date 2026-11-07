@@ -61,6 +61,32 @@ describe('EnrollmentsService (RG01/RG04/RG13/RG14)', () => {
     expect(created[0]).toMatchObject({ totalAmountXof: 50000 });
   });
 
+  it('un changement de prix catalogue ne modifie pas les inscriptions existantes (RG04)', async () => {
+    // Reservation au prix de 50 000 XOF...
+    const { prisma, created } = makePrisma({
+      id: 1,
+      status: 'ACTIVE',
+      priceXof: 50000,
+      capacity: null,
+    });
+    const svc = new EnrollmentsService(prisma as never);
+    await svc.create(1, student);
+    // ...puis le prix catalogue passe a 60 000 XOF : la ligne deja
+    // creee garde son total fige, seule une NOUVELLE inscription
+    // (autre participant) fige le nouveau prix.
+    const other = { ...student, email: 'autre@example.com' };
+    const { prisma: prisma2, created: created2 } = makePrisma({
+      id: 1,
+      status: 'ACTIVE',
+      priceXof: 60000,
+      capacity: null,
+    });
+    const svc2 = new EnrollmentsService(prisma2 as never);
+    await svc2.create(1, other);
+    expect(created[0]).toMatchObject({ totalAmountXof: 50000 });
+    expect(created2[0]).toMatchObject({ totalAmountXof: 60000 });
+  });
+
   it('empeche la double inscription (unique student+sprint)', async () => {
     const { prisma } = makePrisma(
       { id: 1, status: 'ACTIVE', priceXof: 50000, capacity: null },
