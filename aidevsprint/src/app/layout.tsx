@@ -45,7 +45,11 @@ export const viewport: Viewport = {
   themeColor: "#010101",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
     <html lang="fr" className={`${inter.variable} ${jetbrainsMono.variable}`}>
       {/*
