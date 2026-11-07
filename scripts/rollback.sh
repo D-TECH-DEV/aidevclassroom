@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # Procédure de Rollback Applicatif — Aidev Classroom
-# Usage : ./scripts/rollback.sh [dev|preprod|prod] [TAG_VERSION_PRECEDENTE]
+# Usage : ./scripts/rollback.sh [dev|preprod|prod] [TAG_API] [TAG_FRONTEND]
+#   TAG_FRONTEND est optionnel (defaut : meme valeur que TAG_API).
+#   Mode non interactif (CI) : ROLLBACK_AUTO_CONFIRM=oui dans l'environnement.
 # ==============================================================================
 set -Eeuo pipefail
 
@@ -12,6 +14,7 @@ check_prerequisites
 
 TARGET_ENV="${1:-}"
 ROLLBACK_TAG="${2:-}"
+ROLLBACK_FRONT_TAG="${3:-$ROLLBACK_TAG}"
 
 resolve_env "$TARGET_ENV"
 
@@ -35,15 +38,19 @@ if [[ -z "$ROLLBACK_TAG" ]]; then
     exit 1
 fi
 
-read -r -p "Confirmez-vous le retour vers la version '${ROLLBACK_TAG}' pour [${ENV_NAME}] ? (oui/non) : " confirmation
-if [[ "$confirmation" != "oui" ]]; then
-    log_warn "Rollback annulé par l'opérateur."
-    exit 0
+if [[ "${ROLLBACK_AUTO_CONFIRM:-}" != "oui" ]]; then
+    read -r -p "Confirmez-vous le retour vers la version '${ROLLBACK_TAG}' pour [${ENV_NAME}] ? (oui/non) : " confirmation
+    if [[ "$confirmation" != "oui" ]]; then
+        log_warn "Rollback annulé par l'opérateur."
+        exit 0
+    fi
+else
+    log_warn "ROLLBACK_AUTO_CONFIRM=oui : retour arriere sans invite (mode CI)."
 fi
 
-log_info "Application du tag versionné : API_VERSION=${ROLLBACK_TAG} FRONTEND_VERSION=${ROLLBACK_TAG}"
+log_info "Application des tags versionnés : API_VERSION=${ROLLBACK_TAG} FRONTEND_VERSION=${ROLLBACK_FRONT_TAG}"
 export API_VERSION="${ROLLBACK_TAG}"
-export FRONTEND_VERSION="${ROLLBACK_TAG}"
+export FRONTEND_VERSION="${ROLLBACK_FRONT_TAG}"
 
 log_info "Redéploiement des services avec les images versionnées..."
 $DOCKER_COMPOSE up -d --no-build

@@ -8,18 +8,11 @@
  * trois libellés courts n'ont pas de hiérarchie à préserver.
  *
  * L'année est calculée plutôt qu'écrite en dur : un copyright figé se
- * périme tout seul. `"use cache"` est nécessaire — avec Cache Components,
- * Next 16 refuse de pré-rendre une page qui lit l'heure courante, parce
- * que la valeur changerait d'un rendu à l'autre. La directive dit que
- * cette valeur est figée au build, ce qui est exactement ce qu'on veut
- * pour un site redéployé à chaque édition.
- *
- * La fonction est `async` parce que `"use cache"` l'exige — c'est une
- * contrainte de la directive, pas un besoin du composant.
+ * périme tout seul. Le pré-rendu statique fige cette valeur au build,
+ * ce qui est exactement ce qu'on veut pour un site redéployé à chaque
+ * édition.
  */
-export async function Footer() {
-  "use cache";
-
+export function Footer() {
   return (
     <footer className="relative border-t border-fg/10 py-[clamp(1.5rem,4svh,2.5rem)]">
       <div

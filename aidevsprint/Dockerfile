@@ -23,7 +23,9 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 COPY package*.json ./
-RUN npm ci
+# --include=dev : ENV NODE_ENV=production ferait omettre les devDeps
+# (tailwindcss, typescript...), indispensables au build Next.js.
+RUN npm ci --include=dev
 
 COPY . .
 
@@ -58,8 +60,9 @@ USER nextjs
 
 EXPOSE 3000
 
-# Healthcheck HTTP sur la racine du frontend Next.js
+# Healthcheck HTTP sur la racine du frontend Next.js (127.0.0.1 : dans
+# l'image Alpine, localhost résout en ::1 et le serveur n'écoute qu'en IPv4)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-  CMD wget -qO- http://localhost:3000/ || exit 1
+  CMD wget -qO- http://127.0.0.1:3000/ || exit 1
 
 CMD ["node", "server.js"]

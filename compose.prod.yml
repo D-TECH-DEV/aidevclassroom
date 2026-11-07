@@ -22,7 +22,10 @@ services:
       # Permet de joindre le PostgreSQL du VPS s'il est exécuté directement sur l'hôte Ubuntu
       - "host.docker.internal:host-gateway"
     networks:
+      # aidev-prod-net : réseau isolé de la stack ; main-network : réseau
+      # mutualisé du VPS (conteneur PostgreSQL 'postgres' + Nginx Proxy Manager)
       - aidev-prod-net
+      - main-network
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/v1/health | grep -q '\"status\":\"ok\"' || exit 1"]
       interval: 30s
@@ -62,7 +65,9 @@ services:
     networks:
       - aidev-prod-net
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ || exit 1"]
+      # 127.0.0.1 et non localhost : dans l'image Alpine, localhost résout
+      # en ::1 en premier et le serveur Next n'écoute qu'en IPv4.
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -86,8 +91,10 @@ services:
     container_name: aidev-proxy-prod
     restart: unless-stopped
     ports:
-      - "${HTTP_PORT:-80}:80"
-      - "${HTTPS_PORT:-443}:443"
+      # 80/443 de l'hôte sont occupés par Nginx Proxy Manager : on publie le
+      # proxy uniquement en local pour les tests directs (le trafic public
+      # passe par NPM -> http://aidev-proxy-prod:80 sur main-network)
+      - "127.0.0.1:${HTTP_PORT:-8081}:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
@@ -101,6 +108,7 @@ services:
         condition: service_healthy
     networks:
       - aidev-prod-net
+      - main-network
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost/healthz | grep -q 'healthy' || exit 1"]
       interval: 30s
@@ -132,3 +140,8 @@ networks:
   aidev-prod-net:
     name: aidev-prod-network
     driver: bridge
+  # Réseau mutualisé préexistant du VPS (PostgreSQL 'postgres', Nginx Proxy
+  # Manager). Externe : Compose ne le crée ni ne le supprime.
+  main-network:
+    name: main-network
+    external: true

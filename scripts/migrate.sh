@@ -23,13 +23,17 @@ log_warn " Base externe définie dans : $(basename "$ENV_FILE")"
 log_warn "=================================================================="
 echo ""
 
-if [[ "$ENV_NAME" == "prod" ]]; then
+if [[ "$ENV_NAME" == "prod" && "${MIGRATE_AUTO_CONFIRM:-}" != "oui" ]]; then
     log_info "Rappel Production : Avez-vous effectué une sauvegarde de la base externe (pg_dump) ?"
     read -r -p "Confirmez-vous l'application des migrations sur la base de production ? (oui/non) : " confirmation
     if [[ "$confirmation" != "oui" ]]; then
         log_warn "Opération annulée par l'opérateur."
         exit 0
     fi
+fi
+
+if [[ "$ENV_NAME" == "prod" && "${MIGRATE_AUTO_CONFIRM:-}" == "oui" ]]; then
+    log_warn "MIGRATE_AUTO_CONFIRM=oui : migrations appliquées sans invite (mode CI)."
 fi
 
 log_info "Exécution de 'npx prisma migrate deploy' via un conteneur éphémère backend..."

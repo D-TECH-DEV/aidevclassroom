@@ -3,6 +3,13 @@ import Link from "next/link";
 import { deconnexion } from "../actions";
 
 /**
+ * Le panneau lit la session (cookie) à chaque requête : aucune de ses
+ * pages ne peut être pré-rendue statiquement. Sans ceci, `next build`
+ * échoue (« uncached or runtime data during prerendering »).
+ */
+export const dynamic = "force-dynamic";
+
+/**
  * La coquille des pages connectées : barre de navigation et déconnexion.
  *
  * Elle ne reprend ni la navbar ni le pied de page du site public — ce

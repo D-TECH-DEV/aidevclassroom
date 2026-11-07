@@ -179,3 +179,59 @@ Ces opérations dépendent exclusivement de l'accès distant au VPS et devront �
 3. Lancer `./scripts/deploy.sh prod --with-migrations`.
 4. Exécuter la commande Certbot pour obtenir votre certificat SSL gratuit (instructions dans [deploy/nginx-and-ssl.md](deploy/nginx-and-ssl.md)).
 5. Activer le bloc SSL dans `nginx/conf.d/default.conf` et recharger Nginx (`docker exec aidev-proxy-prod nginx -s reload`).
+
+---
+
+## 9. Déploiement Réel sur le VPS (2026-11-07)
+
+Travail exécuté directement sur le VPS (utilisateur : domaine `ai-devclassroom.com`).
+
+### 9.1 Constats sur l'existant (lecture seule, rien touché)
+
+- IP publique VPS : **212.47.73.163** (IPv4) et **2a02:c207:2343:2171::1** (IPv6).
+- Ports 80/443 déjà occupés par `nginx-proxy` (Nginx Proxy Manager). Conséquence : notre `aidev-proxy-prod` ne peut pas les publier ; le trafic passera par NPM.
+- PostgreSQL réutilisé : conteneur **`postgres`** (`postgres:16-alpine`, réseau `main-network`, volume `infra_postgres_data`). Base **`aidev_db`** (owner `sikapay`), 1 migration déjà appliquée (`0001_init_pg`, 2026-10-22). Données avant/après : users=1 (ADMIN), students=2, sprints=4, enrollments=2, payments=2 — **inchangées**.
+- L'ancien conteneur `aidev_api` (déploiement manuel précédent, `DATABASE_URL=...@postgres:5432/aidev_db`) **n'a pas été arrêté, modifié ni supprimé**.
+- DNS actuel de `ai-devclassroom.com` : A `193.203.239.81` + AAAA `2a00:7ee0:...` (pointe ailleurs — à changer, voir §9.5).
+
+### 9.2 Fichiers créés ou modifiés (socle uniquement, aucun code métier)
+
+- **Créé `aidev_api/Dockerfile`** (manquant au socle) : multi-stage base/dev/build/prod, user `node`, `CMD ["node", "dist/main"]`, aucune migration au démarrage. Correctif intégré : `npm ci --include=dev` (sinon `NODE_ENV=production` omet `@nestjs/cli` et le build échoue avec `nest: not found`).
+- **Créé `aidev_api/.dockerignore`** (manquant).
+- **`compose.prod.yml`** : backend + proxy rattachés au réseau externe préexistant `main-network` (atteindre `postgres` et NPM) ; proxy publié uniquement en `127.0.0.1:8081:80` (conflit 80/443) ; healthcheck frontend en `127.0.0.1` (voir §9.3).
+- **`nginx/conf.d/default.conf`** : `location /api/v1/` → backend NestJS ; `location /api/` → frontend Next.js (relais même-origine). Sans ceci, le relais `/api/sprints` du frontend était court-circuité par l'ancien `location /api/` → 404 NestJS.
+- **`aidevsprint/Dockerfile`** : `npm ci --include=dev` (même cause : tailwindcss/typescript manquants → `Cannot find module '@tailwindcss/turbopack'`).
+- **`aidevsprint/src/app/admin/(panneau)/layout.tsx`** : ajout `export const dynamic = "force-dynamic"` (les pages admin lisent la session par cookie : non pré-rendables).
+- **`aidevsprint/next.config.ts`** : retrait `cacheComponents` + `partialPrefetching` (incompatibles avec les pages ci-dessus ; `dynamic` interdit sous cacheComponents). ISR conservée via `revalider`.
+- **`aidevsprint/src/components/layout/Footer.tsx`** : retrait de la directive `"use cache"` (requiert cacheComponents) ; le pré-rendu statique fige déjà l'année au build.
+- **Créé `.env.prod`** (`chmod 600`, non versionné) : `DATABASE_URL` vers `postgres:5432/aidev_db` (mot de passe existant recopié sans affichage), `JWT_SECRET` existant réutilisé (continuité des sessions), `PAYSTACK_SECRET_KEY` existante **`sk_test_...` recopiée telle quelle (clé live à fournir)**, `DOMAIN_NAME=API_DOMAIN_NAME=ai-devclassroom.com`, `FRONTEND_URL=https://ai-devclassroom.com`, `NEXT_PUBLIC_API_URL=http://backend:3000/api/v1` (serveur-à-serveur interne), `SWAGGER_ENABLED=false`, `HTTP_PORT=8081`.
+
+### 9.3 Problèmes rencontrés et résolus
+
+1. `aidev_api/Dockerfile` absent → build backend impossible. Recréé selon la spec du §3.
+2. `npm ci` omet les devDeps quand `NODE_ENV=production` → builds backend ET frontend en échec. Corrigé par `--include=dev` dans les deux Dockerfiles.
+3. Page `/admin/sprints/nouveau` : `exigeSession()` (cookie) bloque le pré-rendu statique → `dynamic = "force-dynamic"` sur le layout du panneau.
+4. `cacheComponents` interdit `export const dynamic` et exige Suspense partout ; un seul `"use cache"` existait (Footer, année figée — déjà le comportement du pré-rendu classique). Retiré cacheComponents + directive : build OK (`[edition] catalogue illisible: fetch failed` au build = normal : backend injoignable au build, catch → `[]`, ISR au runtime).
+5. Frontend `unhealthy` alors qu'il servait la home : `localhost` résout `::1` en premier sous Alpine et Next n'écoute qu'en IPv4 → healthchecks passés en `127.0.0.1` (Compose + Dockerfile).
+
+### 9.4 Vérifications réelles effectuées (toutes OK)
+
+- `docker compose -f compose.prod.yml config` : syntaxe OK.
+- `./scripts/deploy.sh prod` : **3/3 conteneurs `healthy`** (`aidev-api-prod`, `aidev-frontend-prod`, `aidev-proxy-prod`).
+- `prisma migrate status` : `Database schema is up to date!` ; `migrate deploy` (confirmé `oui`) : `No pending migrations to apply.` Impact : **nul, aucune opération destructive**.
+- `GET /api/v1/health` direct backend : `{"status":"ok","db":"up"}`. Limite connue : le healthcheck Compose ne grep que `"status":"ok"`, pas `"db":"up"` (vérifié manuellement).
+- Via proxy `127.0.0.1:8081` : `/api/v1/health` → `ok/db:up` ; `/api/sprints?page=1&limit=20` → **vrais sprints de la base** (preuve chaîne Nginx → Next → NestJS → PostgreSQL) ; `/` → HTTP 200 (86 Ko) ; `nginx -t` OK.
+- Depuis NPM : `aidev-proxy-prod` résout en `172.19.0.15` → le Proxy Host fonctionnera.
+
+### 9.5 Reste à faire (côté utilisateur, rien d'automatisable d'ici)
+
+1. **DNS** : voir §10 (changements indispensables ci-dessous).
+2. **Nginx Proxy Manager** (UI `:81`) : créer un Proxy Host `ai-devclassroom.com` → `http://aidev-proxy-prod:80`, activer `Block Common Exploits`, demander le certificat **Let's Encrypt** (email + `Force SSL`) → c'est lui qui termine le HTTPS (pas Certbot dans notre conteneur : 80/443 déjà pris).
+3. **Paystack** : remplacer `PAYSTACK_SECRET_KEY` (actuellement `sk_test_...`) par la clé **live** puis `docker compose -f compose.prod.yml --env-file .env.prod up -d backend` (rebuild frontend inutile).
+4. Cosmétique : `HTTPS_PORT=8443` inutilisé (HTTPS terminé par NPM).
+
+## 10. Configuration DNS (à appliquer chez le registrar)
+
+- Enregistrement **A** — nom : **`@`** (domaine racine) — valeur : **`212.47.73.163`**.
+- Enregistrement **AAAA** — nom : **`@`** — valeur : **`2a02:c207:2343:2171::1`**.
+- Optionnel : CNAME `www` → `ai-devclassroom.com` (uniquement si le `www` doit servir le site ; non configuré dans le Proxy Host par défaut).

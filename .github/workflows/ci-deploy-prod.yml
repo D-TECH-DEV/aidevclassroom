@@ -1,0 +1,146 @@
+# ==============================================================================
+# CI + Deploiement continu — Aidev Classroom (production, VPS)
+#
+# Declenchement : push sur `main` uniquement.
+# Chaine : verifications frontend + backend (+ tests backend, compilation des
+# deux apps), puis deploiement SSH sur le VPS (git pull, build, migrations
+# controlees, up, healthchecks, verification HTTP, rollback applicatif si
+# echec). Une seule execution de deploiement a la fois (concurrency).
+#
+# Secrets GitHub requis (Settings > Secrets and variables > Actions) :
+#   VPS_HOST        : hote SSH public du VPS (IP ou domaine)
+#   VPS_USER        : utilisateur SSH (ex. root)
+#   VPS_PORT        : port SSH (ex. 22)
+#   VPS_SSH_KEY     : cle privee ED25519 dediee au deploiement
+#   VPS_KNOWN_HOSTS : sortie de `ssh-keyscan -p <PORT> <HOST>`
+# Aucun mot de passe, aucune variable applicative (.env.prod reste sur le
+# VPS et n'est jamais versionne). StrictHostKeyChecking reste active.
+# ==============================================================================
+
+name: CI + Deploiement production
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+env:
+  APP_DIR: /root/aidevclassroom
+
+jobs:
+  # -- Verification du frontend Next.js -------------------------------------
+  verifier-frontend:
+    name: Verifier frontend (Next.js)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: aidevsprint
+    steps:
+      - name: Recuperer le code
+        uses: actions/checkout@v4
+
+      - name: Installer Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: aidevsprint/package-lock.json
+
+      - name: Installer les dependances
+        run: npm ci
+
+      - name: Controle de typage strict
+        run: npx tsc --noEmit
+
+      - name: Compilation de production
+        run: npm run build
+        env:
+          # Valeur factice : prouve que le build passe sans fuiter de secret.
+          # La vraie URL est injectee au build sur le VPS via .env.prod.
+          NEXT_PUBLIC_API_URL: http://backend:3000/api/v1
+
+  # -- Verification du backend NestJS ---------------------------------------
+  verifier-backend:
+    name: Verifier backend (NestJS)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: aidev_api
+    steps:
+      - name: Recuperer le code
+        uses: actions/checkout@v4
+
+      - name: Installer Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: aidev_api/package-lock.json
+
+      - name: Installer les dependances
+        run: npm ci
+
+      - name: Generer le client Prisma (factice, build uniquement)
+        run: npx prisma generate
+        env:
+          DATABASE_URL: postgresql://build:build@localhost:5432/build?schema=public
+
+      - name: Executer les tests unitaires
+        run: npm test
+        env:
+          DATABASE_URL: postgresql://build:build@localhost:5432/build?schema=public
+
+      - name: Compilation de production
+        run: npm run build
+        env:
+          DATABASE_URL: postgresql://build:build@localhost:5432/build?schema=public
+
+  # -- Deploiement sur le VPS (apres verifications reussies) -----------------
+  deployer-prod:
+    name: Deployer en production (VPS)
+    runs-on: ubuntu-latest
+    needs:
+      - verifier-frontend
+      - verifier-backend
+    steps:
+      - name: Configurer l'acces SSH (hote verifie, jamais desactive)
+        run: |
+          set -Eeuo pipefail
+          install -m 700 -d ~/.ssh
+          printenv VPS_SSH_KEY > ~/.ssh/deploiement_prod
+          chmod 600 ~/.ssh/deploiement_prod
+          printenv VPS_KNOWN_HOSTS > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          # Refuse les cles d'hote inconnues : la verification stricte reste active.
+          ssh-keygen -F "$VPS_HOST" -f ~/.ssh/known_hosts > /dev/null \
+            || { echo "::error::Hote $VPS_HOST absent de VPS_KNOWN_HOSTS."; exit 1; }
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+
+      - name: Deployer via SSH (git pull, build, migrations, healthchecks)
+        run: |
+          set -Eeuo pipefail
+          ssh -o StrictHostKeyChecking=yes \
+              -o BatchMode=yes \
+              -o ConnectTimeout=15 \
+              -o ServerAliveInterval=15 \
+              -i ~/.ssh/deploiement_prod \
+              -p "${{ secrets.VPS_PORT }}" \
+              "${{ secrets.VPS_USER }}"@"${{ secrets.VPS_HOST }}" \
+              "APP_DIR='${{ env.APP_DIR }}' bash -s" <<'SCRIPT_VPS'
+          set -Eeuo pipefail
+          cd "$APP_DIR"
+          # Refuse tout deploiement si la branche distante est injoignable.
+          git fetch --prune origin
+          git rev-parse --verify origin/main > /dev/null \
+            || { echo "ERREUR : origin/main introuvable."; exit 1; }
+          git reset --hard origin/main
+          echo "Version deployee : $(git rev-parse --short HEAD) ($(git log -1 --format=%s))"
+          ./scripts/ci-deploy.sh prod
+          SCRIPT_VPS

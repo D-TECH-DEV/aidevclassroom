@@ -1,0 +1,15 @@
+node_modules
+dist
+coverage
+.git
+.gitignore
+.env*
+!.env.*.example
+*.md
+docs
+postman
+test
+coverage
+*.log
+npm-debug.log*
+.DS_Store
