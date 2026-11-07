@@ -1,8 +1,23 @@
 # Pour Youssouf — où le site est branché, et ce qui le bloque
 
-> Relevés effectués les 2026-11-01 et 2026-11-02 depuis l'extérieur, contre
-> `https://aidev.you-soft.com/api/v1`. Toutes les commandes de ce document
-> sont reproductibles : lance-les, tu verras la même chose que nous.
+> ⚠️ **Document largement périmé, conservé pour l'historique.**
+>
+> Il a été écrit les 1er et 2 novembre 2026, quand le site n'était hébergé
+> nulle part et qu'aucun sprint n'existait. Depuis, Youssouf a lu ce
+> document et réglé l'essentiel : le site est en ligne sur
+> `ai-devclassroom.com`, le sprint #1 est `ACTIVE`, et le CORS est
+> contourné par un relais même-origine qu'il a écrit lui-même
+> (`src/app/api/[...chemin]/route.ts`).
+>
+> **Ce qui reste à faire est tenu à jour dans
+> [stack.md](./stack.md#ce-que-youssouf-doit-faire-de-son-côté)** — pas
+> ici. Les mesures ci-dessous décrivent l'état du 2 novembre, plus celui
+> d'aujourd'hui.
+>
+> Un point du § 1 reste vrai au 2026-11-07 : `Access-Control-Allow-Origin`
+> n'est toujours renvoyé pour aucune origine, `ai-devclassroom.com`
+> comprise. Ça ne bloque plus rien grâce au relais, mais ce n'est pas
+> réglé pour autant.
 
 Salut Youssouf.
 

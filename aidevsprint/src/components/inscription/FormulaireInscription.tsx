@@ -56,7 +56,7 @@ import type { Edition } from "@/lib/edition";
  * se règle plus tard, depuis la page de retour du premier versement.
  *
  * ⚠️  Il reste une dépendance côté serveur : `PAYSTACK_CALLBACK_URL` doit
- * pointer sur https://ai-dev-sprint.com/paiement/retour. Tant qu'elle ne
+ * pointer sur https://ai-devclassroom.com/paiement/retour. Tant qu'elle ne
  * l'est pas, le participant paie mais atterrit ailleurs.
  */
 

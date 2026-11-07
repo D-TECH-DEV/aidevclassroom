@@ -8,7 +8,7 @@ import { RetourPaiement } from "@/components/paiement/RetourPaiement";
  * `/paiement/retour` — l'adresse où Paystack ramène le visiteur.
  *
  * ⚠️  Elle doit être déclarée côté serveur, dans `PAYSTACK_CALLBACK_URL` :
- *     https://ai-dev-sprint.com/paiement/retour
+ *     https://ai-devclassroom.com/paiement/retour
  * Sans ça, Paystack renvoie ailleurs et le participant ne voit jamais la
  * confirmation. C'est à Youssouf de la poser — voir docs/stack.md.
  *

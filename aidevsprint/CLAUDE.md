@@ -19,7 +19,7 @@ portfolio en ligne.
 | Prix | 20 000 FCFA |
 | Promesse | « Repars avec ton portfolio en ligne » |
 | Accroche | « Le vibe coding, bien fait » |
-| Réservation | ai-dev-sprint.com · WhatsApp 07 04 92 10 80 |
+| Réservation | ai-devclassroom.com · WhatsApp 07 04 92 10 80 |
 
 **Le programme, en 4 temps :**
 
