@@ -34,6 +34,16 @@ export class CreateSprintDto {
   @Min(1)
   minimumPaymentXof!: number;
 
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  duoPriceXof?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  duoMinimumPaymentXof?: number;
+
   @IsDateString()
   startAt!: string;
 
@@ -69,6 +79,16 @@ export class UpdateSprintDto {
   @IsInt()
   @Min(1)
   minimumPaymentXof?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  duoPriceXof?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  duoMinimumPaymentXof?: number | null;
 
   @IsOptional()
   @IsDateString()

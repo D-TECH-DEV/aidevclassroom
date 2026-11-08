@@ -40,6 +40,8 @@ export class EnrollmentsService {
       email: string;
       phone: string;
     },
+    planInput?: string,
+    partnerInput?: { firstName?: string; lastName?: string; phone?: string },
   ) {
     const sprint = await this.prisma.sprint.findUnique({
       where: { id: sprintId },
@@ -56,15 +58,56 @@ export class EnrollmentsService {
         message: "Ce Sprint n'accepte pas de nouvelles inscriptions.",
       });
     }
+    const plan = (planInput ?? 'SINGLE').toUpperCase();
+    if (plan !== 'SINGLE' && plan !== 'DUO') {
+      throw new BadRequestException({
+        code: 'INVALID_PLAN',
+        message: 'Forfait inconnu : SINGLE ou DUO.',
+      });
+    }
+    const sprintDuo = sprint as typeof sprint & {
+      duoPriceXof?: number | null;
+    };
+    if (plan === 'DUO' && sprintDuo.duoPriceXof == null) {
+      throw new UnprocessableEntityException({
+        code: 'DUO_NOT_AVAILABLE',
+        message: 'Le forfait duo est indisponible pour ce Sprint.',
+      });
+    }
+    const partnerFirstName = partnerInput?.firstName?.trim() ?? '';
+    const partnerLastName = partnerInput?.lastName?.trim() ?? '';
+    const partnerPhone = (partnerInput?.phone ?? '').replace(/[\s-]/g, '');
+    if (
+      plan === 'DUO' &&
+      (partnerFirstName.length < 2 ||
+        partnerLastName.length < 2 ||
+        !/^\+[1-9]\d{6,17}$/.test(partnerPhone))
+    ) {
+      throw new BadRequestException({
+        code: 'PARTNER_REQUIRED',
+        message:
+          'Le nom et le numero du binome sont requis pour le forfait duo.',
+      });
+    }
+    // RG04 : prix fige selon le forfait choisi.
+    const total =
+      plan === 'DUO' ? (sprintDuo.duoPriceXof as number) : sprint.priceXof;
+    const seatsNeeded = plan === 'DUO' ? 2 : 1;
     const n = normalizeStudentInput(studentInput);
     // Capacite + doublon + creation dans une transaction (RG14, anti-concurrence).
+    // Un dossier DUO occupe 2 places.
     try {
       const result = await this.prisma.$transaction(async (tx) => {
         if (sprint.capacity != null) {
-          const count = await tx.enrollment.count({
+          const rows = await tx.enrollment.findMany({
             where: { sprintId, status: { not: 'CANCELLED' } },
+            select: { plan: true },
           });
-          if (count >= sprint.capacity) {
+          const used = rows.reduce(
+            (s, r) => s + ((r as { plan?: string }).plan === 'DUO' ? 2 : 1),
+            0,
+          );
+          if (used + seatsNeeded > sprint.capacity) {
             throw new ConflictException({
               code: 'SPRINT_CAPACITY_REACHED',
               message: 'Ce Sprint a atteint sa capacite maximale.',
@@ -91,7 +134,11 @@ export class EnrollmentsService {
           data: {
             studentId: student.id,
             sprintId,
-            totalAmountXof: sprint.priceXof, // RG04 : prix fige
+            totalAmountXof: total,
+            plan: plan,
+            partnerFirstName: plan === 'DUO' ? partnerFirstName : null,
+            partnerLastName: plan === 'DUO' ? partnerLastName : null,
+            partnerPhone: plan === 'DUO' ? partnerPhone : null,
             status: 'PENDING',
             trackingTokenHash: hashTrackingToken(trackingToken),
           },
@@ -112,6 +159,64 @@ export class EnrollmentsService {
       }
       throw e;
     }
+  }
+
+  /**
+   * Retrouve les dossiers d'un e-mail et re-emet un jeton de suivi par
+   * dossier (rotation). Le jeton d'origine n'est stocke que hache et ne
+   * peut pas etre relu : on en genere un nouveau et on remplace le hash.
+   * Sans OTP, quiconque connait l'e-mail obtient l'acces — assume.
+   */
+  async findByEmail(email: string) {
+    const clean = email.trim().toLowerCase();
+    const student = await this.prisma.student.findUnique({
+      where: { email: clean },
+    });
+    if (!student) {
+      return { dossiers: [] };
+    }
+    const enrollments = await this.prisma.enrollment.findMany({
+      where: { studentId: student.id },
+      include: {
+        sprint: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            status: true,
+            minimumPaymentXof: true,
+          },
+        },
+        payments: {
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            amountXof: true,
+            currency: true,
+            reference: true,
+            status: true,
+            authorizationUrl: true,
+            paidAt: true,
+            createdAt: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    const dossiers = await Promise.all(
+      enrollments.map(async (e) => {
+        const trackingToken = randomBytes(32).toString('hex');
+        await this.prisma.enrollment.update({
+          where: { id: e.id },
+          data: { trackingTokenHash: hashTrackingToken(trackingToken) },
+        });
+        const { trackingTokenHash, studentId, ...rest } = e;
+        void trackingTokenHash;
+        void studentId;
+        return { ...this.withBalance(rest), trackingToken };
+      }),
+    );
+    return { dossiers };
   }
 
   async listAdmin(

@@ -53,6 +53,8 @@ export type Sprint = {
   description?: string | null;
   priceXof: number;
   minimumPaymentXof: number;
+  duoPriceXof?: number | null;
+  duoMinimumPaymentXof?: number | null;
   startAt: string;
   endAt: string;
   capacity?: number | null;
@@ -104,6 +106,10 @@ export type Paiement = {
 export type Inscription = {
   id: number;
   status: StatutInscription;
+  plan?: "SINGLE" | "DUO";
+  partnerFirstName?: string | null;
+  partnerLastName?: string | null;
+  partnerPhone?: string | null;
   totalAmountXof: number;
   /** Somme des paiements `SUCCESS`. Présent sur liste, détail et statut. */
   totalPaidXof?: number;

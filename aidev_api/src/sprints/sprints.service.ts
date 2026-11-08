@@ -18,11 +18,32 @@ export const SPRINT_TRANSITIONS: Record<SprintStatus, SprintStatus[]> = {
 export class SprintsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  private checkAmounts(priceXof: number, minimumPaymentXof: number): void {
+  private checkAmounts(
+    priceXof: number,
+    minimumPaymentXof: number,
+    duoPriceXof?: number | null,
+    duoMinimumPaymentXof?: number | null,
+  ): void {
     if (minimumPaymentXof > priceXof) {
       throw new BadRequestException({
         code: 'MINIMUM_EXCEEDS_PRICE',
         message: 'Le minimum de versement ne peut pas depasser le prix.',
+      });
+    }
+    if (duoMinimumPaymentXof != null && duoPriceXof == null) {
+      throw new BadRequestException({
+        code: 'DUO_MINIMUM_WITHOUT_PRICE',
+        message: 'Le minimum duo exige un prix duo.',
+      });
+    }
+    if (
+      duoPriceXof != null &&
+      duoMinimumPaymentXof != null &&
+      duoMinimumPaymentXof > duoPriceXof
+    ) {
+      throw new BadRequestException({
+        code: 'DUO_MINIMUM_EXCEEDS_PRICE',
+        message: 'Le minimum duo ne peut pas depasser le prix duo.',
       });
     }
   }
@@ -33,12 +54,19 @@ export class SprintsService {
     description?: string;
     priceXof: number;
     minimumPaymentXof: number;
+    duoPriceXof?: number | null;
+    duoMinimumPaymentXof?: number | null;
     startAt: string;
     endAt: string;
     capacity?: number;
     status?: SprintStatus;
   }) {
-    this.checkAmounts(data.priceXof, data.minimumPaymentXof);
+    this.checkAmounts(
+      data.priceXof,
+      data.minimumPaymentXof,
+      data.duoPriceXof,
+      data.duoMinimumPaymentXof,
+    );
     if (new Date(data.startAt) >= new Date(data.endAt)) {
       throw new BadRequestException({
         code: 'INVALID_DATES',
@@ -53,6 +81,8 @@ export class SprintsService {
           description: data.description,
           priceXof: data.priceXof,
           minimumPaymentXof: data.minimumPaymentXof,
+          duoPriceXof: data.duoPriceXof ?? null,
+          duoMinimumPaymentXof: data.duoMinimumPaymentXof ?? null,
           startAt: new Date(data.startAt),
           endAt: new Date(data.endAt),
           capacity: data.capacity ?? null,
@@ -142,6 +172,8 @@ export class SprintsService {
       description: string;
       priceXof: number;
       minimumPaymentXof: number;
+      duoPriceXof: number | null;
+      duoMinimumPaymentXof: number | null;
       startAt: string;
       endAt: string;
       capacity: number | null;
@@ -150,7 +182,16 @@ export class SprintsService {
     const sprint = await this.detail(id);
     const priceXof = data.priceXof ?? sprint.priceXof;
     const minimum = data.minimumPaymentXof ?? sprint.minimumPaymentXof;
-    this.checkAmounts(priceXof, minimum);
+    const duoPrice =
+      data.duoPriceXof !== undefined
+        ? data.duoPriceXof
+        : ((sprint as { duoPriceXof?: number | null }).duoPriceXof ?? null);
+    const duoMinimum =
+      data.duoMinimumPaymentXof !== undefined
+        ? data.duoMinimumPaymentXof
+        : ((sprint as { duoMinimumPaymentXof?: number | null })
+            .duoMinimumPaymentXof ?? null);
+    this.checkAmounts(priceXof, minimum, duoPrice, duoMinimum);
     const startAt = data.startAt ? new Date(data.startAt) : sprint.startAt;
     const endAt = data.endAt ? new Date(data.endAt) : sprint.endAt;
     if (startAt >= endAt) {
@@ -169,6 +210,12 @@ export class SprintsService {
         ...(data.priceXof !== undefined ? { priceXof: data.priceXof } : {}),
         ...(data.minimumPaymentXof !== undefined
           ? { minimumPaymentXof: data.minimumPaymentXof }
+          : {}),
+        ...(data.duoPriceXof !== undefined
+          ? { duoPriceXof: data.duoPriceXof }
+          : {}),
+        ...(data.duoMinimumPaymentXof !== undefined
+          ? { duoMinimumPaymentXof: data.duoMinimumPaymentXof }
           : {}),
         ...(data.startAt !== undefined ? { startAt } : {}),
         ...(data.endAt !== undefined ? { endAt } : {}),

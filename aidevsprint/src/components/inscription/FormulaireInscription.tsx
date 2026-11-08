@@ -61,15 +61,26 @@ const INDICATIF_CI = "225";
 /** Longueur d'un numéro ivoirien depuis le passage à 10 chiffres. */
 const CHIFFRES_LOCAUX = 10;
 
-type NomChamp = "prenom" | "nom" | "email" | "telephone";
+type NomChamp =
+  | "prenom"
+  | "nom"
+  | "email"
+  | "telephone"
+  | "binomePrenom"
+  | "binomeNom"
+  | "binomeTelephone";
 type Erreurs = Partial<Record<NomChamp | "global", string>>;
 type Etat = "repos" | "envoi" | "ok";
+type Forfait = "SINGLE" | "DUO";
 
 const VIDE: Record<NomChamp, string> = {
   prenom: "",
   nom: "",
   email: "",
   telephone: "",
+  binomePrenom: "",
+  binomeNom: "",
+  binomeTelephone: "",
 };
 
 /**
@@ -98,11 +109,24 @@ export function normaliseTelephone(saisi: string): string | null {
   return null;
 }
 
-function verifie(valeurs: Record<NomChamp, string>): Erreurs {
+function verifie(
+  valeurs: Record<NomChamp, string>,
+  forfait: Forfait,
+): Erreurs {
   const erreurs: Erreurs = {};
 
   if (valeurs.prenom.trim().length < 2) erreurs.prenom = "Écris ton prénom.";
   if (valeurs.nom.trim().length < 2) erreurs.nom = "Écris ton nom.";
+  if (forfait === "DUO") {
+    if (valeurs.binomePrenom.trim().length < 2)
+      erreurs.binomePrenom = "Le prénom de ton binôme.";
+    if (valeurs.binomeNom.trim().length < 2)
+      erreurs.binomeNom = "Le nom de ton binôme.";
+    if (normaliseTelephone(valeurs.binomeTelephone) === null)
+      erreurs.binomeTelephone = valeurs.binomeTelephone.trim()
+        ? "Numéro incomplet. Dix chiffres, ou l'indicatif du pays."
+        : "Le numéro du binôme est obligatoire.";
+  }
 
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(valeurs.email.trim())) {
     erreurs.email = "Cette adresse email n'est pas valide.";
@@ -197,9 +221,13 @@ type ReponseInscription = {
   enrollment: {
     id: number;
     status: string;
+    plan?: Forfait;
     /** Le prix figé au moment de la réservation : seule valeur à payer. */
     totalAmountXof: number;
-    sprint?: { minimumPaymentXof?: number } | null;
+    sprint?: {
+      minimumPaymentXof?: number;
+      duoMinimumPaymentXof?: number | null;
+    } | null;
   };
   trackingToken: string;
 };
@@ -218,6 +246,8 @@ type Confirmee = {
   jeton: string;
   prenom: string;
   email: string;
+  forfait: Forfait;
+  binome?: string;
   totalXof: number;
   minimumXof: number;
 };
@@ -241,6 +271,18 @@ function traduit(erreur: ErreurApi): Erreurs {
         global: `C'est complet. Écris-nous sur WhatsApp au ${WHATSAPP_AFFICHE}, on te met sur la liste d'attente.`,
       };
 
+    case "DUO_NOT_AVAILABLE":
+      return {
+        global: `Le forfait duo n'est plus disponible. Choisis le forfait solo.`,
+      };
+
+    case "PARTNER_REQUIRED":
+      return {
+        binomePrenom: "Le prénom de ton binôme.",
+        binomeNom: "Le nom de ton binôme.",
+        binomeTelephone: "Le numéro du binôme est obligatoire.",
+      };
+
     case "TOO_MANY_REQUESTS":
       return { global: "Trop de tentatives d'un coup. Réessaie dans une minute." };
 
@@ -260,6 +302,9 @@ export function FormulaireInscription({ edition }: { edition: Edition }) {
   const [valeurs, setValeurs] = useState(VIDE);
   const [erreurs, setErreurs] = useState<Erreurs>({});
   const [etat, setEtat] = useState<Etat>("repos");
+  // Le forfait choisi : solo, ou duo quand le sprint le propose.
+  const duoPropose = edition.prixDuoFCFA != null;
+  const [forfait, setForfait] = useState<Forfait>("SINGLE");
   const [confirmee, setConfirmee] = useState<Confirmee | null>(null);
   const [paiementEnCours, setPaiementEnCours] = useState(false);
   const [erreurPaiement, setErreurPaiement] = useState<string | null>(null);
@@ -330,7 +375,7 @@ export function FormulaireInscription({ edition }: { edition: Edition }) {
     evenement.preventDefault();
     if (etat === "envoi") return;
 
-    const trouvees = verifie(valeurs);
+    const trouvees = verifie(valeurs, forfait);
     if (Object.keys(trouvees).length > 0) {
       setErreurs(trouvees);
       return;
@@ -346,6 +391,14 @@ export function FormulaireInscription({ edition }: { edition: Edition }) {
           method: "POST",
           body: JSON.stringify({
             sprintId: edition.id,
+            plan: forfait,
+            ...(forfait === "DUO"
+              ? {
+                  partnerFirstName: valeurs.binomePrenom.trim(),
+                  partnerLastName: valeurs.binomeNom.trim(),
+                  partnerPhone: normaliseTelephone(valeurs.binomeTelephone),
+                }
+              : {}),
             student: {
               firstName: valeurs.prenom.trim(),
               lastName: valeurs.nom.trim(),
@@ -357,17 +410,28 @@ export function FormulaireInscription({ edition }: { edition: Edition }) {
       );
 
       rangeJetonSuivi(enrollment.id, trackingToken);
+      const planServeur = enrollment.plan ?? forfait;
       setConfirmee({
         id: enrollment.id,
         jeton: trackingToken,
         prenom: valeurs.prenom.trim(),
         email: valeurs.email.trim().toLowerCase(),
+        forfait: planServeur,
+        binome:
+          planServeur === "DUO"
+            ? `${valeurs.binomePrenom.trim()} ${valeurs.binomeNom.trim()}`.trim()
+            : undefined,
         // Le total figé par le serveur fait foi, pas le prix du
         // catalogue (qui a pu changer entre-temps). Repli sur le
         // catalogue si la réponse ne porte pas le sprint.
         totalXof: enrollment.totalAmountXof,
         minimumXof:
-          enrollment.sprint?.minimumPaymentXof ?? edition.minimumFCFA,
+          planServeur === "DUO"
+            ? (enrollment.sprint?.duoMinimumPaymentXof ??
+              edition.minimumDuoFCFA ??
+              enrollment.sprint?.minimumPaymentXof ??
+              edition.minimumFCFA)
+            : (enrollment.sprint?.minimumPaymentXof ?? edition.minimumFCFA),
       });
       setValeurs(VIDE);
       setEtat("ok");
@@ -463,15 +527,26 @@ export function FormulaireInscription({ edition }: { edition: Edition }) {
           C&apos;est noté, {confirmee.prenom}.
         </p>
         <p className="text-body text-fg/70">
-          Ta place est retenue. Elle est confirmée une fois les{" "}
-          {confirmee.totalXof.toLocaleString("fr-FR")} FCFA réglés — tu peux
-          réserver avec 30 % et payer le reste plus tard.
+          {confirmee.forfait === "DUO" ? (
+            <>
+              Deux places retenues
+              {confirmee.binome ? ` — avec ${confirmee.binome}` : ""}. Elles
+              sont confirmées une fois les{" "}
+              {confirmee.totalXof.toLocaleString("fr-FR")} FCFA réglés — tu
+              peux réserver avec 30 % et payer le reste plus tard.
+            </>
+          ) : (
+            <>
+              Ta place est retenue. Elle est confirmée une fois les{" "}
+              {confirmee.totalXof.toLocaleString("fr-FR")} FCFA réglés — tu
+              peux réserver avec 30 % et payer le reste plus tard.
+            </>
+          )}
         </p>
 
-        {/* Payer tout de suite, tant que l'onglet est encore ouvert : le
-            jeton de suivi ne vit que dans ce navigateur, et c'est lui qui
-            autorise le paiement. Revenir demain depuis le téléphone de
-            quelqu'un d'autre ne marchera pas. */}
+        {/* Payer tout de suite, tant que l'onglet est encore ouvert :
+            c'est le plus simple. Le reste se règle plus tard avec
+            l'e-mail de l'inscription, depuis n'importe quel appareil. */}
         {acompte !== null ? (
           <CtaButton
             type="button"
@@ -527,6 +602,41 @@ export function FormulaireInscription({ edition }: { edition: Edition }) {
       noValidate
       className="flex flex-col gap-[clamp(1rem,2.5svh,1.5rem)]"
     >
+      {/* Le forfait : solo, ou duo (2 places) quand le sprint le propose.
+          Le prix duo est figé côté serveur à la réservation. */}
+      {duoPropose ? (
+        <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Forfait">
+          <button
+            type="button"
+            role="radio"
+            aria-checked={forfait === "SINGLE"}
+            onClick={() => setForfait("SINGLE")}
+            className={`rounded-card border px-4 py-3 text-left transition-colors duration-[160ms] ${
+              forfait === "SINGLE" ? "border-accent/60 bg-surface" : "border-fg/15"
+            }`}
+          >
+            <span className="block text-body font-bold">Solo — 1 place</span>
+            <span className="mt-1 block font-mono text-small text-fg/60">
+              {edition.prixFCFA.toLocaleString("fr-FR")} FCFA
+            </span>
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={forfait === "DUO"}
+            onClick={() => setForfait("DUO")}
+            className={`rounded-card border px-4 py-3 text-left transition-colors duration-[160ms] ${
+              forfait === "DUO" ? "border-accent/60 bg-surface" : "border-fg/15"
+            }`}
+          >
+            <span className="block text-body font-bold">Duo — 2 places</span>
+            <span className="mt-1 block font-mono text-small text-fg/60">
+              {(edition.prixDuoFCFA ?? 0).toLocaleString("fr-FR")} FCFA
+            </span>
+          </button>
+        </div>
+      ) : null}
+
       {/* Prénom et nom sur une rangée : l'API les veut séparés, mais deux
           champs courts l'un sous l'autre allongent le panneau pour rien. */}
       <div className="grid gap-[clamp(1rem,2.5svh,1.5rem)] sm:grid-cols-2">
@@ -556,6 +666,50 @@ export function FormulaireInscription({ edition }: { edition: Edition }) {
           placeholder="Yao"
         />
       </div>
+
+      {/* Le binôme : seulement en duo, une place chacun sous un seul dossier. */}
+      {forfait === "DUO" ? (
+        <>
+        <div className="grid gap-[clamp(1rem,2.5svh,1.5rem)] sm:grid-cols-2">
+          <Champ
+            nom="binomePrenom"
+            etiquette="Prénom du binôme"
+            valeur={valeurs.binomePrenom}
+            onChange={ecrit("binomePrenom")}
+            erreur={erreurs.binomePrenom}
+            type="text"
+            autoComplete="off"
+            maxLength={100}
+            placeholder="Awa"
+          />
+
+          <Champ
+            nom="binomeNom"
+            etiquette="Nom du binôme"
+            valeur={valeurs.binomeNom}
+            onChange={ecrit("binomeNom")}
+            erreur={erreurs.binomeNom}
+            type="text"
+            autoComplete="off"
+            maxLength={100}
+            placeholder="Diallo"
+          />
+        </div>
+
+        <Champ
+          nom="binomeTelephone"
+          etiquette="Téléphone du binôme"
+          aide="Dix chiffres suffisent, on ajoute le +225."
+          valeur={valeurs.binomeTelephone}
+          onChange={ecrit("binomeTelephone")}
+          erreur={erreurs.binomeTelephone}
+          type="tel"
+          inputMode="tel"
+          autoComplete="off"
+          placeholder="07 04 92 10 80"
+        />
+        </>
+      ) : null}
 
       <Champ
         nom="telephone"
@@ -643,9 +797,15 @@ export function FormulaireInscription({ edition }: { edition: Edition }) {
             </p>
           ) : repriseRatee ? (
             <p className="text-small text-fg/70">
-              Dossier introuvable sur cet appareil. Paie depuis le
-              navigateur où tu t&apos;es inscrit, ou écris-nous sur
-              WhatsApp au {WHATSAPP_AFFICHE}.
+              Dossier introuvable sur cet appareil. Retrouve-le avec ton
+              e-mail sur la{" "}
+              <a
+                href="/paiement/reprendre"
+                className="underline decoration-fg/25 underline-offset-4"
+              >
+                page « reprendre mon paiement »
+              </a>
+              , ou écris-nous sur WhatsApp au {WHATSAPP_AFFICHE}.
             </p>
           ) : null}
         </div>

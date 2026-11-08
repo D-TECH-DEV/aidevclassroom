@@ -31,7 +31,11 @@ function CarteSprint({
     year: "numeric",
   }).format(new Date(sprint.dateDebut));
 
-  const ligneFait = `${date} · ${sprint.prixFCFA.toLocaleString("fr-FR")} FCFA`;
+  const prix =
+    sprint.prixDuoFCFA != null
+      ? `Solo ${sprint.prixFCFA.toLocaleString("fr-FR")} · Duo ${sprint.prixDuoFCFA.toLocaleString("fr-FR")} FCFA`
+      : `${sprint.prixFCFA.toLocaleString("fr-FR")} FCFA`;
+  const ligneFait = `${date} · ${prix}`;
 
   // Une session annoncée, pas encore ouverte : le creux de l'ancien
   // design, pas le vert des inscriptions ouvertes. Et pas de bouton :

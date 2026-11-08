@@ -34,6 +34,8 @@ async function main(): Promise<void> {
       description: '4 semaines pour construire une API complete.',
       priceXof: 50000,
       minimumPaymentXof: 5000,
+      duoPriceXof: 80000,
+      duoMinimumPaymentXof: 10000,
       startAt: new Date('2026-11-10T09:00:00Z'),
       endAt: new Date('2026-12-10T18:00:00Z'),
       capacity: 50,

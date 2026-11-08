@@ -19,6 +19,7 @@ import { TrackingTokenGuard } from '../common/guards/tracking-token.guard';
 import {
   ChangeEnrollmentStatusDto,
   CreateEnrollmentDto,
+  LookupByEmailDto,
 } from './dto/enrollment.dto';
 import { EnrollmentsService } from './enrollments.service';
 
@@ -30,7 +31,17 @@ export class EnrollmentsController {
   @Post('enrollments')
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
   create(@Body() dto: CreateEnrollmentDto) {
-    return this.enrollments.create(dto.sprintId, dto.student);
+    return this.enrollments.create(dto.sprintId, dto.student, dto.plan, {
+      firstName: dto.partnerFirstName,
+      lastName: dto.partnerLastName,
+      phone: dto.partnerPhone,
+    });
+  }
+
+  @Post('enrollments/by-email')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  byEmail(@Body() dto: LookupByEmailDto) {
+    return this.enrollments.findByEmail(dto.email);
   }
 
   @Get('admin/enrollments')

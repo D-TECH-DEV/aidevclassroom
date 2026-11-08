@@ -442,6 +442,44 @@ describe('PaymentsService (Paystack moque, RG08-RG12)', () => {
     expect(store.updated[0]).toMatchObject({ status: 'FAILED' });
   });
 
+  it('dossier DUO : le minimum duo fait foi quand il est defini', async () => {
+    const { prisma } = makePrisma({
+      enrollment: {
+        ...enrollmentBase,
+        plan: 'DUO',
+        totalAmountXof: 80000,
+        sprint: {
+          minimumPaymentXof: 5000,
+          duoMinimumPaymentXof: 10000,
+          status: 'ACTIVE',
+        },
+        payments: [],
+      },
+    });
+    const paystack = {
+      initializeTransaction: jest.fn(async () => ({
+        authorizationUrl: 'https://checkout.paystack.com/u',
+        providerReference: 'prov_duo',
+      })),
+      verifyTransaction: jest.fn(),
+      checkSignature: jest.fn(),
+      callbackUrl: 'http://cb',
+    };
+    const svc = new PaymentsService(
+      prisma as never,
+      paystack as unknown as PaystackService,
+      { get: () => 'XOF' } as unknown as ConfigService,
+    );
+    // 8 000 < minimum duo 10 000 : refuse, meme si >= minimum single.
+    await expect(svc.initialize(1, 8000)).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'PAYMENT_AMOUNT_BELOW_MINIMUM',
+      }),
+    });
+    const out = await svc.initialize(1, 10000);
+    expect(out.status).toBe('PENDING');
+  });
+
   it('webhook duplique : le second ne re-verifie pas (idempotence RG11)', async () => {
     const done = {
       id: 7,

@@ -73,7 +73,9 @@ export function Session({ edition }: { edition: Edition | null }) {
     : A_DETERMINER;
 
   const prix = edition
-    ? `${edition.prixFCFA.toLocaleString("fr-FR")} FCFA`
+    ? edition.prixDuoFCFA != null
+      ? `Solo ${edition.prixFCFA.toLocaleString("fr-FR")} · Duo ${edition.prixDuoFCFA.toLocaleString("fr-FR")} FCFA`
+      : `${edition.prixFCFA.toLocaleString("fr-FR")} FCFA`
     : A_DETERMINER;
 
   return (

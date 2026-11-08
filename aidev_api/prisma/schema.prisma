@@ -31,6 +31,11 @@ enum PaymentStatus {
   ABANDONED
 }
 
+enum EnrollmentPlan {
+  SINGLE
+  DUO
+}
+
 model User {
   id           Int      @id @default(autoincrement())
   name         String   @db.VarChar(150)
@@ -66,6 +71,8 @@ model Sprint {
   description       String?      @db.Text
   priceXof          Int          @map("price_xof")
   minimumPaymentXof Int          @map("minimum_payment_xof")
+  duoPriceXof       Int?         @map("duo_price_xof")
+  duoMinimumPaymentXof Int?      @map("duo_minimum_payment_xof")
   startAt           DateTime     @map("start_at")
   endAt             DateTime     @map("end_at")
   capacity          Int?
@@ -83,6 +90,10 @@ model Enrollment {
   studentId        Int              @map("student_id")
   sprintId         Int              @map("sprint_id")
   totalAmountXof   Int              @map("total_amount_xof")
+  plan             EnrollmentPlan   @default(SINGLE)
+  partnerFirstName String?          @map("partner_first_name") @db.VarChar(100)
+  partnerLastName  String?          @map("partner_last_name") @db.VarChar(100)
+  partnerPhone     String?          @map("partner_phone") @db.VarChar(30)
   status           EnrollmentStatus @default(PENDING)
   trackingTokenHash String          @map("tracking_token_hash") @db.VarChar(255)
   createdAt        DateTime         @default(now()) @map("created_at")

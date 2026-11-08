@@ -17,17 +17,15 @@ import { api, ErreurApi } from "@/lib/api";
  * dit la doc de l'API mot pour mot. Le site n'écrit donc jamais « payé »
  * sur la foi d'une redirection.
  *
- * ── Le jeton de suivi, et son point faible ───────────────────────────
- * L'API ne renvoie le `trackingToken` qu'une seule fois, à l'inscription.
- * Il n'y a ni compte ni mot de passe : ce jeton EST la preuve que le
- * dossier est le nôtre. On le range dans `localStorage`, ce qui veut dire
- * qu'il ne survit ni à un autre appareil, ni à une navigation privée, ni à
- * un stockage vidé. Dans ce cas le paiement reste possible — le webhook
- * Paystack met le statut à jour sans nous — mais le site ne peut plus le
- * lire, et la page de retour le dit au lieu de faire semblant.
- *
- * La vraie réponse est un lien de suivi envoyé par email. Elle appartient
- * à l'API : tant que Youssouf n'envoie pas d'email, on ne peut pas mieux.
+ * ── Le jeton de suivi, et sa récupération ──────────────────────────
+ * L'API renvoie le `trackingToken` à l'inscription, et le re-emet par
+ * e-mail via `POST /enrollments/by-email` (rotation : l'ancien jeton est
+ * remplacé). Il n'y a ni compte ni mot de passe : ce jeton EST la preuve
+ * que le dossier est le nôtre. On le range dans `localStorage`, ce qui
+ * veut dire qu'il ne survit ni à un autre appareil, ni à une navigation
+ * privée, ni à un stockage vidé. Dans ce cas l'e-mail retrouve le dossier
+ * (`retrouveDossiersParEmail`) et ce navigateur redevient capable de payer.
+ * Sans OTP : quiconque connaît l'e-mail obtient l'accès — assumé.
  *
  * On range donc le jeton sous deux clés. Par identifiant d'inscription,
  * pour reprendre un dossier. Par référence de paiement, parce que Paystack
@@ -85,6 +83,10 @@ export type DossierLocal = {
 export type DossierSuivi = {
   id: number;
   status: "PENDING" | "CONFIRMED" | "CANCELLED" | "COMPLETED";
+  plan?: "SINGLE" | "DUO";
+  partnerFirstName?: string | null;
+  partnerLastName?: string | null;
+  partnerPhone?: string | null;
   totalAmountXof: number;
   totalPaidXof?: number;
   remainingAmountXof?: number;
@@ -208,6 +210,38 @@ export async function statutInscription(
     jetonSuivi: jeton,
     cache: "no-store",
   });
+}
+
+/** Un dossier rendu par la recherche par e-mail, avec son jeton tout neuf. */
+export type DossierRecupere = DossierSuivi & {
+  trackingToken: string;
+  plan?: "SINGLE" | "DUO";
+  partnerFirstName?: string | null;
+  partnerLastName?: string | null;
+};
+
+/**
+ * Retrouve les dossiers d'un e-mail, depuis n'importe quel appareil.
+ *
+ * L'API re-emet un jeton de suivi par dossier (rotation) et le renvoie :
+ * on le range aussitot dans ce navigateur, qui devient capable de payer
+ * le reste. Sans OTP : quiconque connait l'e-mail obtient l'acces.
+ */
+export async function retrouveDossiersParEmail(
+  email: string,
+): Promise<DossierRecupere[]> {
+  const reponse = await api<{ dossiers: DossierRecupere[] }>(
+    `/enrollments/by-email`,
+    {
+      method: "POST",
+      body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      cache: "no-store",
+    },
+  );
+  for (const dossier of reponse.dossiers) {
+    rangeJetonSuivi(dossier.id, dossier.trackingToken);
+  }
+  return reponse.dossiers;
 }
 
 /* ── Appels ──────────────────────────────────────────────────────────── */

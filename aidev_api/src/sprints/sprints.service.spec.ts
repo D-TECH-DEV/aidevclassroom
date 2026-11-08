@@ -84,4 +84,32 @@ describe('SprintsService (CRUD + regles)', () => {
       response: expect.objectContaining({ code: 'SPRINT_NOT_FOUND' }),
     });
   });
+
+  it('forfait duo : prix et minimum optionnels mais coherents', async () => {
+    const svc = new SprintsService(makePrisma() as never);
+    const created = await svc.create({
+      ...dto,
+      slug: 'avec-duo',
+      duoPriceXof: 80000,
+      duoMinimumPaymentXof: 10000,
+    });
+    expect(created).toMatchObject({ duoPriceXof: 80000 });
+    // Minimum duo sans prix duo : refuse.
+    await expect(
+      svc.create({ ...dto, slug: 'duo-sans-prix', duoMinimumPaymentXof: 5000 }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'DUO_MINIMUM_WITHOUT_PRICE' }),
+    });
+    // Minimum duo au-dela du prix duo : refuse.
+    await expect(
+      svc.create({
+        ...dto,
+        slug: 'duo-incoherent',
+        duoPriceXof: 80000,
+        duoMinimumPaymentXof: 90000,
+      }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'DUO_MINIMUM_EXCEEDS_PRICE' }),
+    });
+  });
 });

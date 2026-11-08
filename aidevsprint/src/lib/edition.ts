@@ -30,6 +30,8 @@ export type Sprint = {
   description: string | null;
   priceXof: number;
   minimumPaymentXof: number;
+  duoPriceXof: number | null;
+  duoMinimumPaymentXof: number | null;
   startAt: string;
   endAt: string;
   capacity: number | null;
@@ -57,6 +59,10 @@ export type Edition = {
   format: string;
   /** Le versement minimum accepté. Égal au prix s'il faut tout payer. */
   minimumFCFA: number;
+  /** Prix duo pour 2 places, ou `null` quand le forfait duo est indisponible. */
+  prixDuoFCFA: number | null;
+  /** Minimum duo, ou `null` (on utilise alors `minimumFCFA`). */
+  minimumDuoFCFA: number | null;
 };
 
 /**
@@ -82,6 +88,8 @@ export function versEdition(sprint: Sprint): Edition {
     dateDebut: sprint.startAt,
     prixFCFA: sprint.priceXof,
     minimumFCFA: sprint.minimumPaymentXof,
+    prixDuoFCFA: sprint.duoPriceXof ?? null,
+    minimumDuoFCFA: sprint.duoMinimumPaymentXof ?? null,
     quota: sprint.capacity,
     inscrits: null,
     ...FAITS_LOCAUX,

@@ -56,6 +56,14 @@ export class SprintsController {
     return this.sprints.detailPublic(id);
   }
 
+  @Get('admin/sprints/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @ApiBearerAuth('jwt')
+  detailAdmin(@Param('id', ParseIntPipe) id: number) {
+    return this.sprints.detail(id);
+  }
+
   @Post('sprints')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')

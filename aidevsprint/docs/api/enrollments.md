@@ -9,19 +9,25 @@ Basé sur [enrollments.controller.ts](../../src/enrollments/enrollments.controll
 - `PENDING → CONFIRMED, CANCELLED` ; `CONFIRMED → COMPLETED, CANCELLED` ; `CANCELLED, COMPLETED → (aucune)`.
 - `COMPLETED` exige un solde soldé (`remainingAmountXof === 0`) sinon `400 ENROLLMENT_NOT_SETTLED`.
 
-Chaque inscription fige `totalAmountXof = priceXof` du sprint au moment de l'inscription. Champs calculés présents sur liste/détail/statut : `totalPaidXof` (somme des `SUCCESS`) et `remainingAmountXof` (`max(0, total − paid)`).
+Chaque inscription fige son total au moment de l'inscription (RG04) : `totalAmountXof = priceXof` en `SINGLE`, `= duoPriceXof` en `DUO`. Champs calculés présents sur liste/détail/statut : `totalPaidXof` (somme des `SUCCESS`) et `remainingAmountXof` (`max(0, total − paid)`).
+
+Forfaits (`EnrollmentPlan` : `SINGLE | DUO`, défaut `SINGLE`) : un dossier `DUO` couvre 2 places (nom, prénom et numéro du binôme requis, `400 PARTNER_REQUIRED`), compte 2 places de capacité, et utilise le minimum duo pour ses versements quand il est défini. `DUO` sans prix duo au catalogue → `422 DUO_NOT_AVAILABLE`. Forfait inconnu → `400 INVALID_PLAN`.
 
 ## `POST /api/v1/enrollments` — publique, 20/min
 
 ```json
 {
   "sprintId": 3,
+  "plan": "DUO",
+  "partnerFirstName": "Ibrahim",
+  "partnerLastName": "Diallo",
+  "partnerPhone": "+2250700000001",
   "student": { "firstName": "Awa", "lastName": "Diallo", "email": "awa@exemple.com", "phone": "+2250700000000" }
 }
 ```
 
 - Le sprint doit exister et être `ACTIVE`, sinon `404 SPRINT_NOT_FOUND` ou `422 SPRINT_NOT_ACTIVE`.
-- Capacité : comptage des non-`CANCELLED` ; plein → `409 SPRINT_CAPACITY_REACHED`.
+- Capacité : somme des places des non-`CANCELLED` (`SINGLE` = 1, `DUO` = 2) ; plein → `409 SPRINT_CAPACITY_REACHED`.
 - Doublon (même étudiant + même sprint) → `409 DUPLICATE_ENROLLMENT` (contrainte unique Prisma rattrapée aussi en `P2002`).
 
 Réponse `201` (seule réponse contenant le token en clair) :
@@ -36,7 +42,21 @@ Réponse `201` (seule réponse contenant le token en clair) :
 }
 ```
 
-**Conservez `trackingToken`** : il ne sera plus jamais renvoyé. Sans lui, le participant ne peut ni suivre son dossier ni payer.
+**Conservez `trackingToken`** : hors reprise par e-mail (ci-dessous), il ne sera plus jamais renvoyé. Sans lui, le participant ne peut ni suivre son dossier ni payer.
+
+## `POST /api/v1/enrollments/by-email` — publique, 10/min
+
+```json
+{ "email": "awa@exemple.com" }
+```
+
+Retrouve les dossiers d'un e-mail depuis n'importe quel appareil, sans OTP. Pour chaque dossier, l'API **re-emet un jeton** (rotation : l'ancien est remplacé) et le renvoie avec le résumé + soldes :
+
+```json
+{ "data": { "dossiers": [{ "id": 45, "trackingToken": "…", "remainingAmountXof": 35000 }] }, "meta": {} }
+```
+
+E-mail inconnu → `{ "dossiers": [] }` (même réponse, sans rien dévoiler). Sans OTP, quiconque connaît l'e-mail obtient l'accès : assumé.
 
 ## Suivi participant (jeton de suivi)
 

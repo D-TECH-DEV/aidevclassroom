@@ -6,6 +6,7 @@ import {
   changerStatutSprint,
   changeStatutInscription,
   reverifiePaiement,
+  supprimerSprintExistant,
   type Etat,
 } from "@/app/admin/actions";
 import {
@@ -106,6 +107,46 @@ export function BoutonSprint({
         {enCours ? "…" : LIBELLE_SPRINT[vers] === "Lancé" && vers === "ACTIVE"
           ? "Lancer"
           : `Passer à « ${LIBELLE_SPRINT[vers]} »`}
+      </button>
+      {etat.erreur ? (
+        <span role="alert" className="font-mono text-small text-fg/70">
+          {etat.erreur}
+        </span>
+      ) : null}
+    </form>
+  );
+}
+
+/**
+ * Supprime un sprint — seulement sans inscriptions, l'API refuse sinon.
+ *
+ * Le navigateur demande confirmation avant : une suppression physique ne
+ * se rattrape pas. Les sprints avec des dossiers se désactivent plutôt
+ * qu'ils ne se suppriment.
+ */
+export function BoutonSupprimerSprint({ id }: { id: number }) {
+  const [etat, agir, enCours] = useActionState(
+    supprimerSprintExistant,
+    INITIAL,
+  );
+
+  return (
+    <form
+      action={agir}
+      className="flex flex-col items-start gap-2"
+      onSubmit={(e) => {
+        if (!window.confirm("Supprimer ce sprint ? Irréversible.")) {
+          e.preventDefault();
+        }
+      }}
+    >
+      <input type="hidden" name="id" value={id} />
+      <button
+        type="submit"
+        disabled={enCours}
+        className={`${bouton} border-fg/20 text-fg/60`}
+      >
+        {enCours ? "…" : "Supprimer"}
       </button>
       {etat.erreur ? (
         <span role="alert" className="font-mono text-small text-fg/70">

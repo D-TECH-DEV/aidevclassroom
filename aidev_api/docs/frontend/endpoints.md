@@ -44,6 +44,7 @@ Préfixe `/admins`, tout JWT `ADMIN`.
 |---|---|---|---|---|
 | `GET` | `/sprints?page&limit` | non | — | `ACTIVE` uniquement |
 | `GET` | `/admin/sprints?page&limit&status` | ADMIN | `status?` enum | tous statuts par défaut |
+| `GET` | `/admin/sprints/:id` | ADMIN | — | fiche complète (édition) ; `404` |
 | `GET` | `/sprints/:id` | non | — | `404` si non-`ACTIVE` ou inconnu |
 | `POST` | `/sprints` | ADMIN | `CreateSprintDto` complet | `409 SLUG_EXISTS`, `400 MINIMUM_EXCEEDS_PRICE / INVALID_DATES` |
 | `PATCH` | `/sprints/:id` | ADMIN | `UpdateSprintDto` (sans `slug`/`status`) | champ inconnu → `400` |
@@ -54,7 +55,8 @@ Préfixe `/admins`, tout JWT `ADMIN`.
 
 | Méthode | Chemin | Auth | Body / Query | Réponse |
 |---|---|---|---|---|
-| `POST` | `/enrollments` | non (20/min) | `{ sprintId >0, student: {...} }` | `201 { enrollment, trackingToken }` ; `404 SPRINT_NOT_FOUND`, `422 SPRINT_NOT_ACTIVE`, `409 CAPACITY / DUPLICATE` |
+| `POST` | `/enrollments` | non (20/min) | `{ sprintId >0, plan?: SINGLE\|DUO, partnerFirstName?, partnerLastName?, partnerPhone?, student: {...} }` | `201 { enrollment, trackingToken }` ; `400 INVALID_PLAN / PARTNER_REQUIRED`, `422 DUO_NOT_AVAILABLE`, `404 SPRINT_NOT_FOUND`, `422 SPRINT_NOT_ACTIVE`, `409 CAPACITY / DUPLICATE` |
+| `POST` | `/enrollments/by-email` | non (10/min) | `{ email }` | `200 { dossiers: [{ ..., trackingToken }] }` (rotation), `[]` si inconnu |
 | `GET` | `/admin/enrollments?page&limit&sprintId&status&search` | ADMIN | filtres combinables | items enrichis (`totalPaidXof`, `remainingAmountXof`) |
 | `GET` | `/admin/enrollments/:id` | ADMIN | — | détail + soldes ; `404` |
 | `GET` | `/enrollments/:id/status` | suivi | header/query/body `trackingToken` | résumé + paiements limités ; `401` guard, `404` |

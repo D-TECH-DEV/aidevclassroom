@@ -8,6 +8,7 @@ import {
   dossiersLocaux,
   lancePaiement,
   rangeTrace,
+  retrouveDossiersParEmail,
   SECOURS_WHATSAPP,
   statutInscription,
   traduitPaiement,
@@ -24,12 +25,11 @@ import {
  * Paystack, même page de retour. Pas de formulaire, pas d'e-mail à
  * retaper : un bouton y mène, le reste s'affiche, on paie.
  *
- * ── Limite assumée ─────────────────────────────────────────────────
- * On ne montre que les dossiers ouverts sur cet appareil : le jeton de
- * suivi ne sort jamais du navigateur où l'inscription a eu lieu (voir
- * `src/lib/paiement.ts`). Un dossier d'un autre appareil reste
- * invisible — et dans ce cas on le dit avec le repli WhatsApp plutôt
- * qu'un vide qui accuserait le visiteur.
+ * ── D'où viennent les dossiers ──────────────────────────────────────
+ * Ceux ouverts sur cet appareil remontent tout seuls (`localStorage`).
+ * Un dossier d'un autre appareil se retrouve avec son e-mail : l'API
+ * re-emet alors un jeton pour ce navigateur (voir `src/lib/paiement.ts`).
+ * Le repli WhatsApp reste pour les cas sans e-mail.
  */
 
 type DossierAffiche = {
@@ -74,46 +74,80 @@ export function ReprendrePaiement() {
   // ensemble, chacune porte son propre état.
   const [enCours, setEnCours] = useState<Record<number, boolean>>({});
   const [erreurs, setErreurs] = useState<Record<number, string>>({});
+  // Recherche par e-mail : pour un autre appareil que celui d'inscription.
+  const [email, setEmail] = useState("");
+  const [rechercheEmail, setRechercheEmail] = useState(false);
+  const [erreurEmail, setErreurEmail] = useState<string | null>(null);
+  const [retrouves, setRetrouves] = useState<number | null>(null);
+
+  // Relit les dossiers connus de ce navigateur et leur reste à payer.
+  async function charge(): Promise<Etat> {
+    const locaux = dossiersLocaux();
+    if (locaux.length === 0) return { phase: "vide" };
+
+    const affiches = await Promise.all(
+      locaux.map(async (local): Promise<DossierAffiche> => {
+        try {
+          const suivi = await statutInscription(
+            local.idInscription,
+            local.jeton,
+          );
+          return { local, suivi };
+        } catch (cause) {
+          return {
+            local,
+            erreur:
+              cause instanceof ErreurApi &&
+              cause.code === "ENROLLMENT_NOT_FOUND"
+                ? "Ce dossier n'existe plus côté serveur."
+                : traduitPaiement(cause),
+          };
+        }
+      }),
+    );
+    return { phase: "liste", dossiers: affiches };
+  }
 
   // Chargement direct à l'ouverture : aucun e-mail à saisir, les
   // dossiers connus de ce navigateur remontent tout seuls.
   useEffect(() => {
     let annule = false;
-
-    (async () => {
-      const locaux = dossiersLocaux();
-      if (locaux.length === 0) {
-        if (!annule) setEtat({ phase: "vide" });
-        return;
-      }
-
-      const affiches = await Promise.all(
-        locaux.map(async (local): Promise<DossierAffiche> => {
-          try {
-            const suivi = await statutInscription(
-              local.idInscription,
-              local.jeton,
-            );
-            return { local, suivi };
-          } catch (cause) {
-            return {
-              local,
-              erreur:
-                cause instanceof ErreurApi &&
-                cause.code === "ENROLLMENT_NOT_FOUND"
-                  ? "Ce dossier n'existe plus côté serveur."
-                  : traduitPaiement(cause),
-            };
-          }
-        }),
-      );
-      if (!annule) setEtat({ phase: "liste", dossiers: affiches });
-    })();
-
+    void charge().then((suivant) => {
+      if (!annule) setEtat(suivant);
+    });
     return () => {
       annule = true;
     };
   }, []);
+
+  // Un autre téléphone, un autre navigateur : l'e-mail retrouve les
+  // dossiers et range leurs jetons ici, qui devient capable de payer.
+  async function recupereParEmail(evenement: React.FormEvent) {
+    evenement.preventDefault();
+    if (rechercheEmail) return;
+    const propre = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(propre)) {
+      setErreurEmail("Cette adresse e-mail n'est pas valide.");
+      return;
+    }
+    setRechercheEmail(true);
+    setErreurEmail(null);
+    setRetrouves(null);
+    try {
+      const dossiers = await retrouveDossiersParEmail(propre);
+      setRetrouves(dossiers.length);
+      if (dossiers.length === 0) {
+        setErreurEmail(
+          "Aucun dossier pour cette adresse. Vérifie l'e-mail de ton inscription.",
+        );
+      }
+      setEtat(await charge());
+    } catch (cause) {
+      setErreurEmail(traduitPaiement(cause));
+    } finally {
+      setRechercheEmail(false);
+    }
+  }
 
   async function paieReste(dossier: DossierAffiche) {
     const reste = dossier.suivi?.remainingAmountXof;
@@ -172,20 +206,80 @@ export function ReprendrePaiement() {
     );
   }
 
+  // Le formulaire e-mail : la porte d'entrée depuis un autre appareil.
+  // Même carte que le reste, pour ne pas faire deux pages en une.
+  function BlocEmail() {
+    return (
+      <form
+        onSubmit={(e) => void recupereParEmail(e)}
+        className="rounded-card border border-fg/15 bg-surface
+                   px-[clamp(1.25rem,3vw,2rem)] py-[clamp(1.25rem,3svh,2rem)]
+                   text-left"
+      >
+        <p className="text-h3 font-bold leading-tight tracking-tight">
+          Un autre téléphone ?
+        </p>
+        <p className="mt-2 text-body text-fg/70">
+          Saisis l&apos;e-mail de ton inscription : on retrouve ton reste à
+          payer ici même, et tu paies comme avant.
+        </p>
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="ton@email.com"
+            autoComplete="email"
+            aria-label="E-mail de ton inscription"
+            className="w-full rounded-field border border-fg/20 bg-bg
+                       px-4 py-3 text-body text-fg outline-none
+                       placeholder:text-fg/35 focus-visible:border-accent/60"
+          />
+          <button
+            type="submit"
+            disabled={rechercheEmail}
+            className="inline-flex shrink-0 items-center justify-center
+                       rounded-pill border-2 border-cta px-8 py-3
+                       text-body font-bold transition-transform
+                       duration-[120ms] active:scale-[0.96]
+                       disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {rechercheEmail ? "Recherche…" : "Retrouver"}
+          </button>
+        </div>
+        {erreurEmail ? (
+          <p role="alert" className="mt-3 text-small font-medium text-fg">
+            {erreurEmail}
+          </p>
+        ) : null}
+        {retrouves !== null && !erreurEmail ? (
+          <p role="status" className="mt-3 text-small text-fg/70">
+            {retrouves === 0
+              ? "Aucun dossier retrouvé."
+              : `${retrouves} dossier${retrouves > 1 ? "s" : ""} retrouvé${retrouves > 1 ? "s" : ""} : paie juste en dessous.`}
+          </p>
+        ) : null}
+      </form>
+    );
+  }
+
   if (etat.phase === "vide") {
     return (
-      <Cadre>
-        <Titre>Aucun dossier sur cet appareil.</Titre>
-        <Texte>
-          Les inscriptions faites ici s&apos;y retrouvent toutes seules —
-          mais la clé d&apos;un dossier ne voyage pas : navigation privée,
-          autre téléphone, stockage vidé, et ce navigateur ne connaît rien.
-        </Texte>
-        <Texte>
-          Donne-nous ton e-mail et on retrouve ton reste à payer à la main.{" "}
-          {SECOURS_WHATSAPP}
-        </Texte>
-      </Cadre>
+      <div className="flex flex-col gap-[clamp(1rem,2.5svh,1.5rem)]">
+        <Cadre>
+          <Titre>Aucun dossier sur cet appareil.</Titre>
+          <Texte>
+            Les inscriptions faites ici s&apos;y retrouvent toutes seules —
+            mais la clé d&apos;un dossier ne voyage pas : navigation privée,
+            autre téléphone, stockage vidé, et ce navigateur ne connaît rien.
+          </Texte>
+          <Texte>
+            Pas de panique : ton inscription est gardée côté serveur.{" "}
+            {SECOURS_WHATSAPP}
+          </Texte>
+        </Cadre>
+        <BlocEmail />
+      </div>
     );
   }
 
@@ -201,6 +295,7 @@ export function ReprendrePaiement() {
           onPaie={() => void paieReste(dossier)}
         />
       ))}
+      <BlocEmail />
     </div>
   );
 }
@@ -248,6 +343,14 @@ function LigneDossier({
         <p className="text-h3 font-bold leading-tight tracking-tight">
           {suivi.sprint?.name ?? `Dossier n°${suivi.id}`}
         </p>
+        {suivi.plan === "DUO" ? (
+          <p className="font-mono text-small text-fg/50">
+            Forfait duo
+            {suivi.partnerFirstName || suivi.partnerLastName
+              ? ` · avec ${[suivi.partnerFirstName, suivi.partnerLastName].filter(Boolean).join(" ")}`
+              : ""}
+          </p>
+        ) : null}
         <p className="font-mono text-small text-fg/50">
           {suivi.totalPaidXof?.toLocaleString("fr-FR") ?? 0} /{" "}
           {suivi.totalAmountXof.toLocaleString("fr-FR")} FCFA payés

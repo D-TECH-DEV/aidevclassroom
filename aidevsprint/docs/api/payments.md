@@ -5,7 +5,7 @@ Basé sur [payments.controller.ts](../../src/payments/payments.controller.ts), [
 ## Principes (à respecter côté frontend)
 
 - Devise par défaut `XOF`, montants **entiers**. Conversion isolée : `XOF` transmis tel quel ; `NGN/GHS/ZAR/KES/USD` × 100 (voir `toProviderAmount`).
-- Un versement doit vérifier `minimumPaymentXof ≤ amount ≤ remaining`. Les `PENDING` existants sont réservés : deux initialisations simultanées ne peuvent pas dépasser le solde.
+- Un versement doit vérifier `minimum ≤ amount ≤ remaining`, où `minimum` = `duoMinimumPaymentXof` pour un dossier `DUO` quand il est défini, sinon `minimumPaymentXof`. Les `PENDING` existants sont réservés : deux initialisations simultanées ne peuvent pas dépasser le solde.
 - **Le retour navigateur ne prouve rien.** Seule la vérification serveur (`verify`) ou le webhook font foi.
 - `PaymentStatus` : `PENDING | SUCCESS | FAILED | ABANDONED` (`ABANDONED` existe en base mais n'est jamais écrit par le code actuel).
 

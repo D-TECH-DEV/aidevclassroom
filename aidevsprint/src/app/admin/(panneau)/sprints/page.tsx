@@ -28,7 +28,10 @@ import {
   TitrePage,
   Vide,
 } from "@/components/admin/Briques";
-import { BoutonSprint } from "@/components/admin/BoutonAction";
+import {
+  BoutonSprint,
+  BoutonSupprimerSprint,
+} from "@/components/admin/BoutonAction";
 
 /**
  * `/admin/sprints` — la liste des sessions, filtrable par statut.
@@ -146,6 +149,7 @@ async function Contenu({ searchParams }: Params) {
                   "Nom",
                   "Prix",
                   "Minimum",
+                  "Duo",
                   "Période",
                   "Capacité",
                   "Statut",
@@ -164,6 +168,21 @@ async function Contenu({ searchParams }: Params) {
                     </Cellule>
                     <Cellule mono>{montant(s.priceXof)}</Cellule>
                     <Cellule mono>{montant(s.minimumPaymentXof)}</Cellule>
+                    <Cellule mono>
+                      {s.duoPriceXof != null ? (
+                        <>
+                          {montant(s.duoPriceXof)}
+                          <span className="block text-fg/40">
+                            min{" "}
+                            {s.duoMinimumPaymentXof != null
+                              ? montant(s.duoMinimumPaymentXof)
+                              : montant(s.minimumPaymentXof)}
+                          </span>
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </Cellule>
                     <Cellule mono sourd>
                       <span className="block whitespace-nowrap">
                         {date(s.startAt)}
@@ -180,6 +199,14 @@ async function Contenu({ searchParams }: Params) {
                     </Cellule>
                     <Cellule>
                       <div className="flex flex-col items-start gap-2">
+                        <Link
+                          href={`/admin/sprints/${s.id}/modifier`}
+                          className="rounded-field border border-fg/25 px-3 py-1.5
+                                     font-mono text-small text-fg/80 outline-none
+                                     focus-visible:border-fg"
+                        >
+                          Modifier
+                        </Link>
                         {TRANSITIONS_SPRINT[s.status].map((vers) => (
                           <BoutonSprint key={vers} id={s.id} vers={vers} />
                         ))}
@@ -188,6 +215,7 @@ async function Contenu({ searchParams }: Params) {
                             —
                           </span>
                         ) : null}
+                        <BoutonSupprimerSprint id={s.id} />
                       </div>
                     </Cellule>
                   </Ligne>

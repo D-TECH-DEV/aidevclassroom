@@ -124,11 +124,15 @@ export type NouveauSprint = {
   description?: string;
   priceXof: number;
   minimumPaymentXof: number;
+  duoPriceXof?: number | null;
+  duoMinimumPaymentXof?: number | null;
   startAt: string;
   endAt: string;
   capacity?: number | null;
   status?: StatutSprint;
 };
+
+export type SprintModifie = Partial<NouveauSprint>;
 
 export function sprints({
   page = 1,
@@ -149,6 +153,26 @@ export function creerSprint(donnees: NouveauSprint) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(donnees),
+    cache: "no-store",
+  });
+}
+
+export function sprint(id: number) {
+  return apiAdmin<Sprint>(`/admin/sprints/${id}`);
+}
+
+export function modifierSprint(id: number, donnees: SprintModifie) {
+  return apiAdmin<Sprint>(`/sprints/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(donnees),
+    cache: "no-store",
+  });
+}
+
+export function supprimerSprint(id: number) {
+  return apiAdmin<{ deleted: boolean }>(`/sprints/${id}`, {
+    method: "DELETE",
     cache: "no-store",
   });
 }
@@ -225,6 +249,10 @@ export function traduitAdmin(cause: unknown): string {
       return "Ce slug existe déjà. Choisis-en un autre.";
     case "MINIMUM_EXCEEDS_PRICE":
       return "Le versement minimum ne peut pas dépasser le prix.";
+    case "DUO_MINIMUM_WITHOUT_PRICE":
+      return "Le minimum duo exige un prix duo.";
+    case "DUO_MINIMUM_EXCEEDS_PRICE":
+      return "Le minimum duo ne peut pas dépasser le prix duo.";
     case "INVALID_DATES":
       return "La date de fin doit être après la date de début.";
     case "INVALID_STATUS_TRANSITION":

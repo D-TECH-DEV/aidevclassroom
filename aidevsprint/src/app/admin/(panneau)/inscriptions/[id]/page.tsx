@@ -174,6 +174,23 @@ async function Contenu({ params }: Params) {
               <Ligne2 cle="E-mail" valeur={fiche.student?.email ?? "—"} />
               <Ligne2 cle="Téléphone" valeur={fiche.student?.phone ?? "—"} />
               <Ligne2 cle="Session" valeur={fiche.sprint?.name ?? "—"} />
+              <Ligne2
+                cle="Forfait"
+                valeur={fiche.plan === "DUO" ? "Duo — 2 places" : "Solo"}
+              />
+              {fiche.plan === "DUO" ? (
+                <Ligne2
+                  cle="Binôme"
+                  valeur={
+                    [fiche.partnerFirstName, fiche.partnerLastName]
+                      .filter(Boolean)
+                      .join(" ") || "—"
+                  }
+                />
+              ) : null}
+              {fiche.plan === "DUO" ? (
+                <Ligne2 cle="Tél. binôme" valeur={fiche.partnerPhone ?? "—"} />
+              ) : null}
               <Ligne2 cle="Inscrit le" valeur={date(fiche.createdAt)} />
             </dl>
           </Cadre>

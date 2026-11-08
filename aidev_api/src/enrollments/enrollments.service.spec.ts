@@ -6,9 +6,13 @@ function makePrisma(
   opts: { existing?: unknown; count?: number } = {},
 ) {
   const created: unknown[] = [];
+  const seats = opts.count ?? 0;
   const tx = {
     enrollment: {
-      count: jest.fn(async () => opts.count ?? 0),
+      count: jest.fn(async () => seats),
+      findMany: jest.fn(async () =>
+        Array.from({ length: seats }, () => ({ plan: 'SINGLE' })),
+      ),
       findUnique: jest.fn(async () => opts.existing ?? null),
       create: jest.fn(async ({ data }: never) => {
         const row = { id: 1, ...(data as object) };
@@ -107,6 +111,145 @@ describe('EnrollmentsService (RG01/RG04/RG13/RG14)', () => {
     await expect(svc.create(1, student)).rejects.toMatchObject({
       response: expect.objectContaining({ code: 'SPRINT_CAPACITY_REACHED' }),
     });
+  });
+
+  it('forfait DUO fige le prix duo et exige le binome', async () => {
+    const sprint = {
+      id: 1,
+      status: 'ACTIVE',
+      priceXof: 50000,
+      duoPriceXof: 80000,
+      capacity: null,
+    };
+    const { prisma, created } = makePrisma(sprint);
+    const svc = new EnrollmentsService(prisma as never);
+    await svc.create(1, student, 'DUO', {
+      firstName: 'Ibrahim',
+      lastName: 'Diallo',
+      phone: '+2250700000001',
+    });
+    expect(created[0]).toMatchObject({
+      plan: 'DUO',
+      totalAmountXof: 80000,
+      partnerFirstName: 'Ibrahim',
+      partnerLastName: 'Diallo',
+      partnerPhone: '+2250700000001',
+    });
+    // Forfait inconnu : refuse.
+    await expect(svc.create(1, student, 'TRIO')).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'INVALID_PLAN' }),
+    });
+    const { prisma: prisma2 } = makePrisma(sprint);
+    const svc2 = new EnrollmentsService(prisma2 as never);
+    await expect(
+      svc2.create(1, { ...student, email: 'b@example.com' }, 'DUO', {
+        firstName: 'A',
+        lastName: 'B',
+      }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'PARTNER_REQUIRED' }),
+    });
+    // Nom bon mais numero manquant : refuse aussi.
+    const { prisma: prisma3 } = makePrisma(sprint);
+    const svc3 = new EnrollmentsService(prisma3 as never);
+    await expect(
+      svc3.create(1, { ...student, email: 'c@example.com' }, 'DUO', {
+        firstName: 'Ibrahim',
+        lastName: 'Diallo',
+      }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'PARTNER_REQUIRED' }),
+    });
+  });
+
+  it('forfait DUO indisponible sans prix duo au catalogue', async () => {
+    const { prisma } = makePrisma({
+      id: 1,
+      status: 'ACTIVE',
+      priceXof: 50000,
+      duoPriceXof: null,
+      capacity: null,
+    });
+    const svc = new EnrollmentsService(prisma as never);
+    await expect(
+      svc.create(1, student, 'DUO', {
+        firstName: 'Ibrahim',
+        lastName: 'Diallo',
+      }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'DUO_NOT_AVAILABLE' }),
+    });
+  });
+
+  it('un dossier DUO occupe 2 places de capacite', async () => {
+    const sprint = {
+      id: 1,
+      status: 'ACTIVE',
+      priceXof: 50000,
+      duoPriceXof: 80000,
+      capacity: 3,
+    };
+    // 2 dossiers SINGLE = 2 places occupees : un DUO (2 places) depasse.
+    const { prisma } = makePrisma(sprint, { count: 2 });
+    const svc = new EnrollmentsService(prisma as never);
+    await expect(
+      svc.create(1, student, 'DUO', {
+        firstName: 'Ibrahim',
+        lastName: 'Diallo',
+        phone: '+2250700000001',
+      }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'SPRINT_CAPACITY_REACHED' }),
+    });
+    // Mais un SINGLE passe encore (2 + 1 = 3).
+    const { prisma: prisma2, created } = makePrisma(sprint, { count: 2 });
+    const svc2 = new EnrollmentsService(prisma2 as never);
+    await svc2.create(1, student, 'SINGLE');
+    expect(created[0]).toMatchObject({ plan: 'SINGLE', totalAmountXof: 50000 });
+  });
+
+  it('retrouve par e-mail et re-emet un jeton (rotation)', async () => {
+    const prisma = {
+      student: {
+        findUnique: jest.fn(async () => ({ id: 1, email: 'a@example.com' })),
+      },
+      enrollment: {
+        findMany: jest.fn(async () => [
+          {
+            id: 7,
+            totalAmountXof: 50000,
+            plan: 'SINGLE',
+            payments: [{ status: 'SUCCESS', amountXof: 10000 }],
+            sprint: { id: 1, name: 'Sprint', slug: 's', status: 'ACTIVE' },
+            trackingTokenHash: 'ancien',
+            studentId: 1,
+          },
+        ]),
+        update: jest.fn(async ({ data }: never) => data),
+      },
+    };
+    const svc = new EnrollmentsService(prisma as never);
+    const out = await svc.findByEmail('A@Example.com');
+    expect(
+      (out.dossiers[0] as { trackingToken: string }).trackingToken,
+    ).toMatch(/^[0-9a-f]{64}$/);
+    expect(out.dossiers[0]).toMatchObject({ remainingAmountXof: 40000 });
+    expect(prisma.enrollment.update).toHaveBeenCalledWith({
+      where: { id: 7 },
+      data: expect.objectContaining({ trackingTokenHash: expect.any(String) }),
+    });
+  });
+
+  it('e-mail inconnu : aucun dossier, sans devoiler', async () => {
+    const prisma = {
+      student: { findUnique: jest.fn(async () => null) },
+      enrollment: { findMany: jest.fn() },
+    };
+    const svc = new EnrollmentsService(prisma as never);
+    await expect(svc.findByEmail('inconnu@example.com')).resolves.toEqual({
+      dossiers: [],
+    });
+    expect(prisma.enrollment.findMany).not.toHaveBeenCalled();
   });
 
   it('cloture COMPLETED exige un solde nul (RG07)', async () => {

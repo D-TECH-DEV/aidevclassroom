@@ -87,7 +87,13 @@ export class PaymentsService {
       where: { id: enrollmentId },
       include: {
         student: { select: { email: true } },
-        sprint: { select: { minimumPaymentXof: true, status: true } },
+        sprint: {
+          select: {
+            minimumPaymentXof: true,
+            duoMinimumPaymentXof: true,
+            status: true,
+          },
+        },
         payments: { select: { status: true, amountXof: true } },
       },
     });
@@ -107,11 +113,13 @@ export class PaymentsService {
       enrollment.totalAmountXof,
       enrollment.payments,
     );
-    const err = validatePaymentAmount(
-      amountXof,
-      enrollment.sprint.minimumPaymentXof,
-      remaining,
-    );
+    // Un dossier DUO utilise son minimum duo quand il est defini.
+    const enrollmentPlan = enrollment.plan;
+    const minimum =
+      enrollmentPlan === 'DUO' && enrollment.sprint.duoMinimumPaymentXof != null
+        ? enrollment.sprint.duoMinimumPaymentXof
+        : enrollment.sprint.minimumPaymentXof;
+    const err = validatePaymentAmount(amountXof, minimum, remaining);
     if (err) {
       const status =
         err === 'PAYMENT_AMOUNT_EXCEEDS_BALANCE' ||
