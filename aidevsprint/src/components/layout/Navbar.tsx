@@ -45,6 +45,10 @@ export function Navbar({
     return () => io.disconnect();
   }, []);
 
+  // Même règle que la jauge du hero : le quota vient du sprint ouvert
+  // (`capacity`) et il est connu dès que l'admin a défini un nombre de
+  // places, même si le compteur d'inscrits n'est pas encore arrivé.
+  const quotaConnu = quota !== null && quota > 0;
   const placesRestantes =
     inscrits !== null && quota !== null ? quota - inscrits : null;
 
@@ -133,6 +137,15 @@ export function Navbar({
                     {placesRestantes}
                   </span>{" "}
                   <span className="text-fg/70">places restantes</span>
+                </>
+              ) : quotaConnu ? (
+                <>
+                  <span className="font-bold text-accent">
+                    [À DÉTERMINER]
+                  </span>{" "}
+                  <span className="text-fg/70">
+                    places restantes · {quota} places
+                  </span>
                 </>
               ) : (
                 <span className="text-fg/50">Places [À DÉTERMINER]</span>
