@@ -13,9 +13,11 @@ import { api, ErreurApi, type Page } from "@/lib/api";
  * Ils viennent du brief et de Malik, ils sont confirmés — ce n'est pas du
  * remplissage. Le jour où l'API gagne les champs, `FAITS_LOCAUX` meurt.
  *
- * Le nombre d'inscrits non plus : il n'existe que sur les routes admin.
- * `inscrits` reste donc `null` et la jauge affiche [À DÉTERMINER], jusqu'à
- * ce que la route publique expose un compteur.
+ * Le nombre d'inscrits, lui, vient de l'API : chaque sprint du catalogue
+ * public porte `enrolledSeats` (personnes ayant versé le minimum) et
+ * `enrolledCount` (dossiers qualifiés). Sans ces champs — API d'avant le
+ * compteur, ou réponse en cache — `inscrits` reste `null` et la jauge
+ * affiche [À DÉTERMINER].
  */
 
 /**
@@ -36,6 +38,10 @@ export type Sprint = {
   endAt: string;
   capacity: number | null;
   status: "ACTIVE" | "INACTIVE";
+  /** Dossiers ayant versé le minimum (toujours présent, `0` si aucun). */
+  enrolledCount: number;
+  /** Personnes inscrites — un dossier DUO qualifié vaut 2. */
+  enrolledSeats: number;
 };
 
 export type Edition = {
@@ -54,7 +60,7 @@ export type Edition = {
   prixFCFA: number;
   /** `null` = places illimitées, c'est la convention de l'API. */
   quota: number | null;
-  /** Toujours `null` : la route publique ne compte pas les inscrits. */
+  /** Personnes ayant versé le minimum, `null` si le compteur est absent. */
   inscrits: number | null;
   format: string;
   /** Le versement minimum accepté. Égal au prix s'il faut tout payer. */
@@ -91,7 +97,9 @@ export function versEdition(sprint: Sprint): Edition {
     prixDuoFCFA: sprint.duoPriceXof ?? null,
     minimumDuoFCFA: sprint.duoMinimumPaymentXof ?? null,
     quota: sprint.capacity,
-    inscrits: null,
+    // Compteur public : les places occupées (un DUO qualifié = 2),
+    // repli sur les dossiers, `null` si l'API ne porte pas le compteur.
+    inscrits: sprint.enrolledSeats ?? sprint.enrolledCount ?? null,
     ...FAITS_LOCAUX,
   };
 }

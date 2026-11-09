@@ -17,7 +17,10 @@ function makePrisma(sprint: unknown = null, enrollCount = 0) {
       })),
       delete: jest.fn(async () => ({ id: 1 })),
     },
-    enrollment: { count: jest.fn(async () => enrollCount) },
+    enrollment: {
+      count: jest.fn(async () => enrollCount),
+      findMany: jest.fn(async () => []),
+    },
   };
 }
 
@@ -81,6 +84,78 @@ describe('SprintsService (CRUD + regles)', () => {
       makePrisma({ id: 1, status: 'DRAFT' }) as never,
     );
     await expect(svc.detailPublic(1)).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'SPRINT_NOT_FOUND' }),
+    });
+  });
+
+  it('catalogue public : chaque sprint porte enrolledCount et enrolledSeats', async () => {
+    const prisma = makePrisma({
+      id: 1,
+      status: 'ACTIVE',
+      minimumPaymentXof: 5000,
+      duoMinimumPaymentXof: null,
+    }) as unknown as {
+      sprint: { findMany: jest.Mock };
+      enrollment: { findMany: jest.Mock };
+    };
+    prisma.sprint.findMany.mockResolvedValue([
+      {
+        id: 1,
+        status: 'ACTIVE',
+        minimumPaymentXof: 5000,
+        duoMinimumPaymentXof: null,
+      },
+    ]);
+    prisma.enrollment.findMany.mockResolvedValue([
+      {
+        sprintId: 1,
+        plan: 'SINGLE',
+        status: 'PENDING',
+        payments: [{ status: 'SUCCESS', amountXof: 5000 }],
+      },
+      {
+        sprintId: 1,
+        plan: 'SINGLE',
+        status: 'PENDING',
+        payments: [{ status: 'SUCCESS', amountXof: 1000 }],
+      },
+    ]);
+    const svc = new SprintsService(prisma as never);
+    const page = await svc.listPublic();
+    expect(page.items[0]).toMatchObject({
+      enrolledCount: 1,
+      enrolledSeats: 1,
+    });
+  });
+
+  it('compteur public : 404 hors catalogue, seuils par forfait', async () => {
+    const prisma = makePrisma({
+      id: 1,
+      status: 'ACTIVE',
+      minimumPaymentXof: 5000,
+      duoMinimumPaymentXof: 10000,
+      capacity: 60,
+    }) as unknown as {
+      sprint: { findUnique: jest.Mock };
+      enrollment: { findMany: jest.Mock };
+    };
+    prisma.enrollment.findMany.mockResolvedValue([
+      {
+        sprintId: 1,
+        plan: 'DUO',
+        status: 'CONFIRMED',
+        payments: [{ status: 'SUCCESS', amountXof: 10000 }],
+      },
+    ]);
+    const svc = new SprintsService(prisma as never);
+    await expect(svc.countEnrolled(1)).resolves.toMatchObject({
+      sprintId: 1,
+      enrolledCount: 1,
+      enrolledSeats: 2,
+      capacity: 60,
+    });
+    const brouillon = makePrisma({ id: 2, status: 'DRAFT' }) as never;
+    await expect(new SprintsService(brouillon).countEnrolled(2)).rejects.toMatchObject({
       response: expect.objectContaining({ code: 'SPRINT_NOT_FOUND' }),
     });
   });

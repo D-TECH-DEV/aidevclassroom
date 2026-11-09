@@ -51,6 +51,11 @@ export class SprintsController {
     );
   }
 
+  @Get('sprints/:id/enrolled-count')
+  enrolledCount(@Param('id', ParseIntPipe) id: number) {
+    return this.sprints.countEnrolled(id);
+  }
+
   @Get('sprints/:id')
   detailPublic(@Param('id', ParseIntPipe) id: number) {
     return this.sprints.detailPublic(id);

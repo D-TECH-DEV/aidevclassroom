@@ -255,6 +255,14 @@
         "responses": { "200": { "description": "supprime", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } }, "409": { "description": "HAS_ENROLLMENTS", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } } }
       }
     },
+    "/sprints/{id}/enrolled-count": {
+      "get": {
+        "tags": ["sprints"],
+        "summary": "Compteur public d'inscrits (minimum verse)",
+        "parameters": [{ "$ref": "#/components/parameters/IdParam" }],
+        "responses": { "200": { "description": "compteur", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } } }, "404": { "description": "NOT_FOUND", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+      }
+    },
     "/sprints/{id}/status": {
       "patch": {
         "tags": ["sprints"],

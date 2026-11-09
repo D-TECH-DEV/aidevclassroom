@@ -32,9 +32,19 @@ Basé sur [sprints.controller.ts](../../src/sprints/sprints.controller.ts) et [s
 
 Renvoie les sprints visibles du site : `ACTIVE` (inscriptions ouvertes) et `INACTIVE` (sessions annoncées en « Bientôt »), triés `createdAt desc`. Ni `DRAFT`, ni `COMPLETED`. Même enveloppe `{ items, total, page, limit }`. À utiliser pour afficher le catalogue.
 
+Chaque item porte le compteur d'inscrits :
+- `enrolledCount` : dossiers non annulés dont le total des versements `SUCCESS` atteint le minimum du sprint ;
+- `enrolledSeats` : personnes inscrites — un dossier `DUO` qualifié vaut 2 places (même convention que `capacity`).
+
+Seule la jauge du site utilise `enrolledSeats` (`inscrits / quota`).
+
 ### `GET /api/v1/sprints/:id` — publique
 
-Fiche uniquement si le sprint est `ACTIVE`, sinon `404 { NOT_FOUND / SPRINT_NOT_FOUND }`. Ne pas s'en servir pour deviner l'existence d'un brouillon.
+Fiche uniquement si le sprint est `ACTIVE`, sinon `404 { NOT_FOUND / SPRINT_NOT_FOUND }`. Ne pas s'en servir pour deviner l'existence d'un brouillon. Porte aussi `enrolledCount` / `enrolledSeats`.
+
+### `GET /api/v1/sprints/:id/enrolled-count` — publique
+
+Compteur seul (utile pour rafraîchir la jauge sans recharger le catalogue) : `{ sprintId, enrolledCount, enrolledSeats, capacity }`. `404 SPRINT_NOT_FOUND` si le sprint est inconnu, brouillon ou terminé.
 
 ## Routes admin (JWT `ADMIN`)
 
