@@ -47,6 +47,7 @@ services:
       - ${ENV_FILE:-.env.dev}
     environment:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:3001/api/v1}
+      - NEXT_PUBLIC_PAYSTACK_CHARGE_ENABLED=${NEXT_PUBLIC_PAYSTACK_CHARGE_ENABLED:-1}
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
     volumes:

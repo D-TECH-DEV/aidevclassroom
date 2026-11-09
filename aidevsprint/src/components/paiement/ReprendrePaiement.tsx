@@ -4,7 +4,13 @@ import { useEffect, useState } from "react";
 
 import { ErreurApi } from "@/lib/api";
 import {
+  ParcoursPaiement,
+  type DossierAPayer,
+} from "@/components/inscription/ParcoursPaiement";
+import {
   adressePaiementValide,
+  CHARGE_DIRECTE_ACTIVE,
+  derniereCharge,
   dossiersLocaux,
   lancePaiement,
   rangeTrace,
@@ -21,9 +27,11 @@ import {
  *
  * Le parcours d'après, en un clic : la page retrouve toute seule les
  * dossiers ouverts sur cet appareil, affiche chaque reste à payer, et
- * chacun se paie comme avant — même `initialize`, même redirection
- * Paystack, même page de retour. Pas de formulaire, pas d'e-mail à
- * retaper : un bouton y mène, le reste s'affiche, on paie.
+ * chacun se paie — en charge mobile money directe (`ParcoursPaiement`,
+ * sans redirection) quand `CHARGE_DIRECTE_ACTIVE`, sinon comme avant
+ * (même `initialize`, même redirection Paystack, même page de retour).
+ * Pas de formulaire, pas d'e-mail à retaper : un bouton y mène, le reste
+ * s'affiche, on paie.
  *
  * ── D'où viennent les dossiers ──────────────────────────────────────
  * Ceux ouverts sur cet appareil remontent tout seuls (`localStorage`).
@@ -79,6 +87,11 @@ export function ReprendrePaiement() {
   const [rechercheEmail, setRechercheEmail] = useState(false);
   const [erreurEmail, setErreurEmail] = useState<string | null>(null);
   const [retrouves, setRetrouves] = useState<number | null>(null);
+  // Le dossier dont on paie le reste en charge directe : le parcours à
+  // étapes remplace alors la liste, avec retour ici (« Précédent »).
+  const [chargeDossier, setChargeDossier] = useState<DossierAPayer | null>(
+    null,
+  );
 
   // Relit les dossiers connus de ce navigateur et leur reste à payer.
   async function charge(): Promise<Etat> {
@@ -159,6 +172,30 @@ export function ReprendrePaiement() {
       return;
     }
 
+    // Parcours direct (charge mobile money, sans redirection) : le même
+    // que depuis l'inscription, avec le seul montant possible (le reste).
+    // Le numéro déjà utilisé est pré-rempli quand il est connu ici.
+    if (CHARGE_DIRECTE_ACTIVE && dossier.suivi) {
+      const suivi = dossier.suivi;
+      const binome = [suivi.partnerFirstName, suivi.partnerLastName]
+        .filter(Boolean)
+        .join(" ");
+      setChargeDossier({
+        idInscription: dossier.local.idInscription,
+        jeton: dossier.local.jeton,
+        prenom: dossier.local.prenom ?? "",
+        email: dossier.local.email,
+        totalXof: suivi.totalAmountXof,
+        minimumXof: suivi.sprint?.minimumPaymentXof ?? reste,
+        forfait: suivi.plan,
+        binome: binome ? binome : undefined,
+        resteXof: reste,
+        telephonePrefill:
+          derniereCharge(dossier.local.idInscription)?.trace.telephone,
+      });
+      return;
+    }
+
     setEnCours((v) => ({ ...v, [dossier.local.idInscription]: true }));
     setErreurs((v) => {
       const suivantes = { ...v };
@@ -195,6 +232,23 @@ export function ReprendrePaiement() {
         [dossier.local.idInscription]: traduitPaiement(cause),
       }));
     }
+  }
+
+  // Le reste se paie dans le même parcours qu'à l'inscription : mêmes
+  // étapes, mêmes messages, reprise d'une charge en cours incluse (le
+  // parcours relit la dernière charge du dossier). « Précédent » revient
+  // ici et rafraîchit les soldes.
+  if (chargeDossier) {
+    return (
+      <ParcoursPaiement
+        key={`reprendre-${chargeDossier.idInscription}`}
+        dossier={chargeDossier}
+        onPrecedent={() => {
+          setChargeDossier(null);
+          void charge().then(setEtat);
+        }}
+      />
+    );
   }
 
   if (etat.phase === "recherche") {

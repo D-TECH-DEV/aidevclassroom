@@ -39,6 +39,9 @@ export function validatePaymentAmount(
     return 'PAYMENT_AMOUNT_INVALID';
   }
   if (remaining <= 0) return 'ENROLLMENT_ALREADY_SETTLED';
+  // Le reste exact solde toujours le dossier, meme sous le minimum : un
+  // reliquat inferieur au minimum ne doit jamais rester impayable.
+  if (amountXof === remaining) return null;
   if (amountXof < minimumPaymentXof) return 'PAYMENT_AMOUNT_BELOW_MINIMUM';
   if (amountXof > remaining) return 'PAYMENT_AMOUNT_EXCEEDS_BALANCE';
   return null;

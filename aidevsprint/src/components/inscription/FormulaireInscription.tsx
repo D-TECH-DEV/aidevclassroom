@@ -4,8 +4,9 @@ import { useId, useState } from "react";
 
 import { api, ErreurApi } from "@/lib/api";
 import { CtaButton } from "@/components/ui/CtaButton";
+import { ParcoursPaiement } from "@/components/inscription/ParcoursPaiement";
 import {
-  acompteReservation,
+  CHARGE_DIRECTE_ACTIVE,
   adressePaiementValide,
   dossiersLocaux,
   lancePaiement,
@@ -42,9 +43,15 @@ import type { Edition } from "@/lib/edition";
  * Paystack ramène sur `/paiement/retour`. Le détail est dans
  * `src/lib/paiement.ts`.
  *
- * L'écran de confirmation propose soit l'acompte de 30 %
- * (`acompteReservation`), soit le total. L'API accepte les versements
- * partiels à partir de `minimumPaymentXof` (`minimum ≤ montant ≤ reste`)
+ * Depuis le LOT A : la confirmation est un parcours à étapes
+ * (`ParcoursPaiement`, mobile money MTN/Orange/Wave, sans carte) derrière
+ * `CHARGE_DIRECTE_ACTIVE` ; l'écran Paystack ci-dessous reste en repli
+ * quand `NEXT_PUBLIC_PAYSTACK_CHARGE_ENABLED` vaut `"0"`.
+ *
+ * L'écran de confirmation propose deux montants déterminés
+ * automatiquement : le minimum du dashboard pour réserver sa place,
+ * et le reste à payer. L'API tranche (`minimum ≤ montant ≤ reste`,
+ * et le reste exact solde toujours, même sous le minimum).
  * et rattache autant de paiements qu'il faut à l'inscription : le reste
  * se règle plus tard, depuis la page de retour du premier versement.
  *
@@ -141,7 +148,7 @@ function verifie(
   return erreurs;
 }
 
-function Champ({
+export function Champ({
   nom,
   etiquette,
   aide,
@@ -241,7 +248,7 @@ type ReponseInscription = {
  * catalogue : si le prix a changé entre l'affichage du catalogue et la
  * réservation, c'est le total figé qui fait foi.
  */
-type Confirmee = {
+export type Confirmee = {
   id: number;
   jeton: string;
   prenom: string;
@@ -250,6 +257,8 @@ type Confirmee = {
   binome?: string;
   totalXof: number;
   minimumXof: number;
+  /** Le numéro saisi, tel quel : pré-remplit l'étape téléphone du parcours. */
+  telephone?: string;
 };
 
 /**
@@ -306,6 +315,18 @@ export function FormulaireInscription({ edition }: { edition: Edition }) {
   const duoPropose = edition.prixDuoFCFA != null;
   const [forfait, setForfait] = useState<Forfait>("SINGLE");
   const [confirmee, setConfirmee] = useState<Confirmee | null>(null);
+  // « Précédent » depuis l'étape moyen du parcours : on remontre le
+  // formulaire (données conservées, voir `envoie`) sans perdre le dossier.
+  const [revientFormulaire, setRevientFormulaire] = useState(false);
+  // Reprise « déjà inscrit » : le reste se paie dans le même parcours.
+  const [dossierReprise, setDossierReprise] = useState<{
+    id: number;
+    jeton: string;
+    prenom: string;
+    email?: string;
+    reste: number;
+    total: number;
+  } | null>(null);
   const [paiementEnCours, setPaiementEnCours] = useState(false);
   const [erreurPaiement, setErreurPaiement] = useState<string | null>(null);
   // Reprise instantanée après un « déjà inscrit » : le dossier retrouvé
@@ -432,8 +453,12 @@ export function FormulaireInscription({ edition }: { edition: Edition }) {
               enrollment.sprint?.minimumPaymentXof ??
               edition.minimumFCFA)
             : (enrollment.sprint?.minimumPaymentXof ?? edition.minimumFCFA),
+        telephone: valeurs.telephone,
       });
-      setValeurs(VIDE);
+      // Les valeurs sont conservées : « Précédent » depuis le parcours de
+      // paiement remontre ce formulaire pré-rempli au lieu d'une page vide.
+      setRevientFormulaire(false);
+      setDossierReprise(null);
       setEtat("ok");
     } catch (cause) {
       setEtat("repos");
@@ -505,16 +530,60 @@ export function FormulaireInscription({ edition }: { edition: Edition }) {
     );
   }
 
-  if (etat === "ok" && confirmee) {
-    // 30 % pour réserver, ou le total d'un coup. `null` quand 30 %
-    // passe sous le minimum du sprint : il ne reste que le total.
-    // Les deux montants viennent de l'inscription figée côté serveur
-    // (`confirmee`), jamais du catalogue : un prix modifié entre
-    // l'affichage et la réservation ne doit pas fausser le versement.
-    const acompte = acompteReservation(
-      confirmee.totalXof,
-      confirmee.minimumXof,
+  // Reprise « déjà inscrit » : le même parcours, avec un seul montant
+  // possible (le reste). L'ancien parcours (redirection Paystack) reste
+  // branché sur le bouton d'origine quand le repli est actif.
+  if (dossierReprise && CHARGE_DIRECTE_ACTIVE) {
+    return (
+      <ParcoursPaiement
+        key={`reprise-${dossierReprise.id}`}
+        dossier={{
+          idInscription: dossierReprise.id,
+          jeton: dossierReprise.jeton,
+          prenom: dossierReprise.prenom,
+          email: dossierReprise.email,
+          totalXof: dossierReprise.total,
+          minimumXof: dossierReprise.reste,
+          resteXof: dossierReprise.reste,
+          telephonePrefill: valeurs.telephone,
+        }}
+        onPrecedent={() => setDossierReprise(null)}
+      />
     );
+  }
+
+  if (etat === "ok" && confirmee && !revientFormulaire) {
+    // Le parcours à étapes (voir `ParcoursPaiement`) : même modale, mêmes
+    // classes, navigation Précédent/Suivant. L'ancien écran de redirection
+    // Paystack suit, derrière le repli `CHARGE_DIRECTE_ACTIVE`.
+    if (CHARGE_DIRECTE_ACTIVE) {
+      return (
+        <ParcoursPaiement
+          key={`confirmee-${confirmee.id}`}
+          dossier={{
+            idInscription: confirmee.id,
+            jeton: confirmee.jeton,
+            prenom: confirmee.prenom,
+            email: confirmee.email,
+            totalXof: confirmee.totalXof,
+            minimumXof: confirmee.minimumXof,
+            forfait: confirmee.forfait,
+            binome: confirmee.binome,
+            telephonePrefill: confirmee.telephone,
+          }}
+          onPrecedent={() => setRevientFormulaire(true)}
+        />
+      );
+    }
+
+    // Un seul montant, déterminé automatiquement : le reste à payer
+    // (ici le total figé côté serveur, rien n'étant encore versé).
+    // Fini les 30 % : le minimum du dashboard reste le plancher servi
+    // par l'API, et le reste exact solde toujours, même sous le minimum.
+    // Le montant vient de l'inscription figée côté serveur (`confirmee`),
+    // jamais du catalogue : un prix modifié entre l'affichage et la
+    // réservation ne doit pas fausser le versement.
+    const resteAPayer = confirmee.totalXof;
 
     return (
       <div
@@ -532,49 +601,45 @@ export function FormulaireInscription({ edition }: { edition: Edition }) {
               Deux places retenues
               {confirmee.binome ? ` — avec ${confirmee.binome}` : ""}. Elles
               sont confirmées une fois les{" "}
-              {confirmee.totalXof.toLocaleString("fr-FR")} FCFA réglés — tu
-              peux réserver avec 30 % et payer le reste plus tard.
+              {confirmee.totalXof.toLocaleString("fr-FR")} FCFA réglés.
             </>
           ) : (
             <>
               Ta place est retenue. Elle est confirmée une fois les{" "}
-              {confirmee.totalXof.toLocaleString("fr-FR")} FCFA réglés — tu
-              peux réserver avec 30 % et payer le reste plus tard.
+              {confirmee.totalXof.toLocaleString("fr-FR")} FCFA réglés.
             </>
           )}
         </p>
 
-        {/* Payer tout de suite, tant que l'onglet est encore ouvert :
-            c'est le plus simple. Le reste se règle plus tard avec
-            l'e-mail de l'inscription, depuis n'importe quel appareil. */}
-        {acompte !== null ? (
+        {/* Deux montants déterminés automatiquement : le minimum du
+            dashboard pour réserver sa place, ou le reste à payer.
+            Le reste se règle plus tard avec l'e-mail de l'inscription,
+            depuis n'importe quel appareil. */}
+        {confirmee.minimumXof < resteAPayer ? (
           <CtaButton
             type="button"
-            onClick={() => void paie(acompte)}
+            onClick={() => void paie(confirmee.minimumXof)}
             disabled={paiementEnCours}
             pleineLargeur
             className="mt-[clamp(0.25rem,1svh,0.75rem)]"
           >
             {paiementEnCours
               ? "Ouverture du paiement…"
-              : `Réserver avec 30 % — ${acompte.toLocaleString("fr-FR")} FCFA`}
+              : `Réserver ma place — ${confirmee.minimumXof.toLocaleString("fr-FR")} FCFA`}
           </CtaButton>
         ) : null}
 
-        <button
+        <CtaButton
           type="button"
-          onClick={() => void paie(confirmee.totalXof)}
+          onClick={() => void paie(resteAPayer)}
           disabled={paiementEnCours}
-          className="inline-flex w-full items-center justify-center rounded-pill
-                     border border-fg/20 px-10 py-[clamp(0.75rem,2.4svh,1.375rem)]
-                     text-body font-bold transition-colors duration-[160ms]
-                     hoverable:hover:border-accent active:scale-[0.96]
-                     disabled:cursor-not-allowed disabled:opacity-60"
+          pleineLargeur
+          className="mt-[clamp(0.25rem,1svh,0.75rem)]"
         >
           {paiementEnCours
             ? "Ouverture du paiement…"
-            : `Tout payer — ${confirmee.totalXof.toLocaleString("fr-FR")} FCFA`}
-        </button>
+            : `Payer — ${resteAPayer.toLocaleString("fr-FR")} FCFA`}
+        </CtaButton>
 
         {erreurPaiement && (
           <p role="alert" className="text-small font-medium text-fg">
@@ -766,25 +831,45 @@ export function FormulaireInscription({ edition }: { edition: Edition }) {
                   (sur {reprise.total.toLocaleString("fr-FR")})
                 </span>
               </p>
-              <CtaButton
-                type="button"
-                onClick={() =>
-                  void lanceEtRedirige(
-                    reprise.id,
-                    reprise.jeton,
-                    reprise.prenom,
-                    reprise.reste,
-                    reprise.email,
-                  )
-                }
-                disabled={paiementEnCours}
-                pleineLargeur
-                className="mt-3"
-              >
-                {paiementEnCours
-                  ? "Ouverture du paiement…"
-                  : `Payer le reste — ${reprise.reste.toLocaleString("fr-FR")} FCFA`}
-              </CtaButton>
+              {CHARGE_DIRECTE_ACTIVE ? (
+                <CtaButton
+                  type="button"
+                  onClick={() =>
+                    setDossierReprise({
+                      id: reprise.id,
+                      jeton: reprise.jeton,
+                      prenom: reprise.prenom,
+                      email: reprise.email,
+                      reste: reprise.reste,
+                      total: reprise.total,
+                    })
+                  }
+                  pleineLargeur
+                  className="mt-3"
+                >
+                  {`Payer le reste — ${reprise.reste.toLocaleString("fr-FR")} FCFA`}
+                </CtaButton>
+              ) : (
+                <CtaButton
+                  type="button"
+                  onClick={() =>
+                    void lanceEtRedirige(
+                      reprise.id,
+                      reprise.jeton,
+                      reprise.prenom,
+                      reprise.reste,
+                      reprise.email,
+                    )
+                  }
+                  disabled={paiementEnCours}
+                  pleineLargeur
+                  className="mt-3"
+                >
+                  {paiementEnCours
+                    ? "Ouverture du paiement…"
+                    : `Payer le reste — ${reprise.reste.toLocaleString("fr-FR")} FCFA`}
+                </CtaButton>
+              )}
               {erreurPaiement ? (
                 <p role="alert" className="mt-2 text-small font-medium text-fg">
                   {erreurPaiement}

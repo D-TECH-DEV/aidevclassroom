@@ -47,6 +47,14 @@ describe('Soldes et montants (RG03/RG05/RG06)', () => {
     expect(validatePaymentAmount(5000, 5000, 50000)).toBeNull();
   });
 
+  it('accepte le reste exact meme sous le minimum (solde du dossier)', () => {
+    expect(validatePaymentAmount(3000, 5000, 3000)).toBeNull();
+    expect(validatePaymentAmount(1, 5000, 1)).toBeNull();
+    expect(validatePaymentAmount(2999, 5000, 3000)).toBe(
+      'PAYMENT_AMOUNT_BELOW_MINIMUM',
+    );
+  });
+
   it('suit les versements partiels jusqu au solde : 10000 puis 15000 puis 25000', () => {
     // Prix fige de l inscription : 50 000 XOF.
     const total = 50000;

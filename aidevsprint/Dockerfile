@@ -29,9 +29,11 @@ RUN npm ci --include=dev
 
 COPY . .
 
-# Injection de la variable d'environnement publique Next.js lors du build
+# Injection des variables d'environnement publiques Next.js lors du build
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+ARG NEXT_PUBLIC_PAYSTACK_CHARGE_ENABLED
+ENV NEXT_PUBLIC_PAYSTACK_CHARGE_ENABLED=${NEXT_PUBLIC_PAYSTACK_CHARGE_ENABLED}
 
 RUN npm run build
 

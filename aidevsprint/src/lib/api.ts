@@ -57,6 +57,13 @@ type Options = RequestInit & {
   jetonSuivi?: string;
 };
 
+/**
+ * Le délai max d'un appel : sans lui, un relais qui ne répond jamais fige
+ * l'écran indéfiniment. Au-delà, on coupe et on lève `ErreurReseau` — les
+ * écrans affichent déjà « réessaie » pour ce cas.
+ */
+const DELAI_REQUETE_MS = 30_000;
+
 export async function api<T>(
   chemin: string,
   { revalider, jetonSuivi, headers, ...init }: Options = {},
@@ -71,10 +78,24 @@ export async function api<T>(
         })())
       : "/api";
 
+  // Coupe franche au-delà du délai (sauf signal fourni par l'appelant).
+  let signal = init.signal;
+  let minuteur: ReturnType<typeof setTimeout> | undefined;
+  let delaiDepasse = false;
+  if (!signal) {
+    const controleur = new AbortController();
+    signal = controleur.signal;
+    minuteur = setTimeout(() => {
+      delaiDepasse = true;
+      controleur.abort();
+    }, DELAI_REQUETE_MS);
+  }
+
   let reponse: Response;
   try {
     reponse = await fetch(`${base}${chemin}`, {
       ...init,
+      signal,
       headers: {
         Accept: "application/json",
         ...(init.body ? { "Content-Type": "application/json" } : {}),
@@ -86,7 +107,14 @@ export async function api<T>(
   } catch (cause) {
     // DNS, TLS, CORS, hors-ligne : le navigateur ne distingue pas, et nous
     // non plus. Tout ce qu'on sait, c'est qu'on n'a pas eu de réponse.
+    if (delaiDepasse) {
+      throw new ErreurReseau(
+        "La requête a pris trop de temps. Vérifie ta connexion et réessaie.",
+      );
+    }
     throw new ErreurReseau(String(cause));
+  } finally {
+    if (minuteur !== undefined) clearTimeout(minuteur);
   }
 
   const corps: unknown = await reponse.json().catch(() => null);

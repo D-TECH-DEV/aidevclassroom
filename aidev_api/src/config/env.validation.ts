@@ -9,6 +9,20 @@ export interface EnvVars {
   PAYSTACK_BASE_URL: string;
   PAYSTACK_CALLBACK_URL: string;
   PAYSTACK_CURRENCY: string;
+  /** Active le canal Charge mobile money (ancien flux conserve sinon). */
+  PAYSTACK_CHARGE_ENABLED: boolean;
+  /** Codes providers autorises pour la Charge (CSV, ex. mtn,orange,wave). */
+  PAYSTACK_CHARGE_PROVIDERS: string;
+  /** Fenetre de scrutation d'une charge en ms (defaut 180 s). */
+  PAYSTACK_CHARGE_POLL_TIMEOUT_MS: number;
+  /** Intervalle de scrutation d'une charge en ms. */
+  PAYSTACK_CHARGE_POLL_INTERVAL_MS: number;
+  /** Duree de reservation d'un PENDING en minutes (puis ABANDONED). */
+  PAYSTACK_PENDING_RESERVE_MINUTES: number;
+  /** Court-circuit verify d'un FAILED recent en minutes (0 = desactive). */
+  PAYSTACK_FAILED_SHORT_CIRCUIT_MINUTES: number;
+  /** Delai max d'un appel HTTP Paystack en ms (defaut 15 s). */
+  PAYSTACK_HTTP_TIMEOUT_MS: number;
   FRONTEND_URL: string;
   SWAGGER_ENABLED: boolean;
 }
@@ -36,6 +50,13 @@ export function validateEnv(config: Record<string, unknown>): EnvVars {
     throw new Error('PORT invalide.');
   }
   const swaggerRaw = get('SWAGGER_ENABLED', 'true').toLowerCase();
+  const chargeProviders = get('PAYSTACK_CHARGE_PROVIDERS', 'mtn,orange,wave')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter((s) => s.length > 0);
+  if (chargeProviders.length === 0) {
+    throw new Error('PAYSTACK_CHARGE_PROVIDERS ne doit pas etre vide.');
+  }
   return {
     NODE_ENV: get('NODE_ENV', 'development'),
     PORT: port,
@@ -53,7 +74,47 @@ export function validateEnv(config: Record<string, unknown>): EnvVars {
       'http://localhost:5173/payment/callback',
     ),
     PAYSTACK_CURRENCY: get('PAYSTACK_CURRENCY', 'XOF'),
+    PAYSTACK_CHARGE_ENABLED: ['1', 'true', 'yes'].includes(
+      get('PAYSTACK_CHARGE_ENABLED', 'false').toLowerCase(),
+    ),
+    PAYSTACK_CHARGE_PROVIDERS: chargeProviders.join(','),
+    PAYSTACK_CHARGE_POLL_TIMEOUT_MS: positiveIntFrom(
+      'PAYSTACK_CHARGE_POLL_TIMEOUT_MS',
+      get('PAYSTACK_CHARGE_POLL_TIMEOUT_MS', '180000'),
+    ),
+    PAYSTACK_CHARGE_POLL_INTERVAL_MS: positiveIntFrom(
+      'PAYSTACK_CHARGE_POLL_INTERVAL_MS',
+      get('PAYSTACK_CHARGE_POLL_INTERVAL_MS', '5000'),
+    ),
+    PAYSTACK_PENDING_RESERVE_MINUTES: positiveIntFrom(
+      'PAYSTACK_PENDING_RESERVE_MINUTES',
+      get('PAYSTACK_PENDING_RESERVE_MINUTES', '120'),
+    ),
+    PAYSTACK_FAILED_SHORT_CIRCUIT_MINUTES: nonNegativeIntFrom(
+      'PAYSTACK_FAILED_SHORT_CIRCUIT_MINUTES',
+      get('PAYSTACK_FAILED_SHORT_CIRCUIT_MINUTES', '15'),
+    ),
+    PAYSTACK_HTTP_TIMEOUT_MS: positiveIntFrom(
+      'PAYSTACK_HTTP_TIMEOUT_MS',
+      get('PAYSTACK_HTTP_TIMEOUT_MS', '15000'),
+    ),
     FRONTEND_URL: get('FRONTEND_URL', 'http://localhost:5173'),
     SWAGGER_ENABLED: ['1', 'true', 'yes'].includes(swaggerRaw),
   };
+}
+
+function positiveIntFrom(name: string, raw: string): number {
+  const n = parseInt(raw, 10);
+  if (!Number.isInteger(n) || n <= 0) {
+    throw new Error(`${name} doit etre un entier strictement positif.`);
+  }
+  return n;
+}
+
+function nonNegativeIntFrom(name: string, raw: string): number {
+  const n = parseInt(raw, 10);
+  if (!Number.isInteger(n) || n < 0) {
+    throw new Error(`${name} doit etre un entier positif ou nul.`);
+  }
+  return n;
 }

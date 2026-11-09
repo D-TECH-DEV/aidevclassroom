@@ -32,7 +32,10 @@ export class PaymentsController {
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: InitializePaymentDto,
   ) {
-    return this.payments.initialize(id, dto.amountXof);
+    return this.payments.initialize(id, dto.amountXof, {
+      provider: dto.provider,
+      phone: dto.phone,
+    });
   }
 
   @Get('payments/:reference/verify')

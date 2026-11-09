@@ -48,6 +48,7 @@ services:
       target: prod
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_PAYSTACK_CHARGE_ENABLED: ${NEXT_PUBLIC_PAYSTACK_CHARGE_ENABLED:-1}
     image: aidev-frontend:preprod
     container_name: aidev-frontend-preprod
     restart: unless-stopped

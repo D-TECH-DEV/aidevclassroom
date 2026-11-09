@@ -16,6 +16,7 @@ Contenu :
 - [Sprints et catalogue](./sprints.md)
 - [Inscriptions](./enrollments.md)
 - [Paiements Paystack](./payments.md)
+- [Paiement direct mobile money (Charge)](./paiements-charge.md)
 - [Tableau de bord](./dashboard.md)
 - [Erreurs et conventions HTTP](./errors.md)
 - [Exemples TypeScript / JavaScript](./examples.md)

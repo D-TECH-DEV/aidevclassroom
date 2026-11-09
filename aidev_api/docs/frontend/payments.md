@@ -7,7 +7,7 @@ Basé sur [payments.controller.ts](../../src/payments/payments.controller.ts), [
 - Devise par défaut `XOF`, montants **entiers**. Conversion isolée : `XOF` transmis tel quel ; `NGN/GHS/ZAR/KES/USD` × 100 (voir `toProviderAmount`).
 - Un versement doit vérifier `minimum ≤ amount ≤ remaining`, où `minimum` = `duoMinimumPaymentXof` pour un dossier `DUO` quand il est défini, sinon `minimumPaymentXof`. Les `PENDING` existants sont réservés : deux initialisations simultanées ne peuvent pas dépasser le solde.
 - **Le retour navigateur ne prouve rien.** Seule la vérification serveur (`verify`) ou le webhook font foi.
-- `PaymentStatus` : `PENDING | SUCCESS | FAILED | ABANDONED` (`ABANDONED` existe en base mais n'est jamais écrit par le code actuel).
+- `PaymentStatus` : `PENDING | SUCCESS | FAILED | ABANDONED`. Les `PENDING` plus anciens que `PAYSTACK_PENDING_RESERVE_MINUTES` passent à `ABANDONED` (voir [charge mobile money](./paiements-charge.md#politique-abandoned)) ; un `ABANDONED` reste re-vérifiable.
 
 ## `POST /api/v1/payments/enrollments/:id/initialize` — jeton de suivi
 
@@ -17,7 +17,7 @@ Guard `TrackingTokenGuard`. Body :
 { "amountXof": 10000 }
 ```
 
-Déroulement : contrôles → création `PENDING` en transaction → appel Paystack `initialize` (e-mail étudiant, référence `sp_...`, `callbackUrl` = `PAYSTACK_CALLBACK_URL` frontend) → `authorizationUrl` stockée. Le paiement reste `PENDING` si Paystack est injoignable (`503 PAYSTACK_UNAVAILABLE`, à re-vérifier plus tard).
+Déroulement : contrôles → création `PENDING` en transaction → appel Paystack `initialize` (e-mail étudiant, référence `sp_...`, `callbackUrl` = `PAYSTACK_CALLBACK_URL` frontend) → `authorizationUrl` stockée. Le paiement reste `PENDING` si Paystack est injoignable (`503 PAYSTACK_UNAVAILABLE`, à re-vérifier plus tard). Avec `{ provider, phone }` et `PAYSTACK_CHARGE_ENABLED=true`, c'est `POST /charge` sans redirection — voir [charge mobile money](./paiements-charge.md).
 
 Réponse `201` :
 

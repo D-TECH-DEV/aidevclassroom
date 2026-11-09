@@ -273,25 +273,6 @@ export async function lancePaiement(
  * jeton qui tient lieu de mot de passe n'a rien à y faire.
  */
 /**
- * L'acompte qui réserve une place : 30 % du total, arrondi au franc
- * supérieur.
- *
- * `null` quand 30 % ne passe pas : montant nul, total déjà soldé, ou
- * acompte sous le minimum du sprint — dans ce cas le visiteur paie tout,
- * et c'est l'API qui tranche (`PAYMENT_AMOUNT_BELOW_MINIMUM`).
- */
-export function acompteReservation(
-  totalXof: number,
-  minimumXof: number,
-): number | null {
-  if (!Number.isFinite(totalXof) || totalXof <= 0) return null;
-  const acompte = Math.ceil(totalXof * 0.3);
-  if (acompte <= 0 || acompte >= totalXof) return null;
-  if (acompte < minimumXof) return null;
-  return acompte;
-}
-
-/**
  * L'adresse de paiement vient de notre API, mais on la contrôle quand
  * même avant d'y envoyer quelqu'un : une redirection est la dernière
  * chose qu'on veut voir détournée, et la vérification coûte trois lignes.
@@ -370,6 +351,19 @@ export function traduitPaiement(erreur: unknown): string {
     case "PAYSTACK_VERIFY_FAILED":
       return "On n'arrive pas à joindre le service de paiement pour confirmer. Si tu as payé, c'est enregistré de leur côté : réessaie dans un instant.";
 
+    case "INVALID_PROVIDER":
+    case "PAYMENT_PROVIDER_INVALID":
+      return "Cet opérateur n'est pas pris en charge. Choisis MTN, Orange ou Wave.";
+
+    case "PAYMENT_PHONE_INVALID":
+      return "Ce numéro n'est pas accepté. Dix chiffres ivoiriens, on ajoute le +225.";
+
+    case "PAYMENT_CHARGE_FAILED":
+      return "Le paiement mobile a échoué. Aucun montant n'a été débité : tu peux réessayer.";
+
+    case "PAYSTACK_VERIFY_TIMEOUT":
+      return "La vérification prend plus de temps que prévu. Ton inscription est gardée : vérifie à nouveau dans un instant.";
+
     case "PAYMENT_VERIFICATION_MISMATCH":
       return `Le paiement ne correspond pas à ce qui était attendu. Ne repaie surtout pas. ${SECOURS_WHATSAPP}`;
 
@@ -377,5 +371,214 @@ export function traduitPaiement(erreur: unknown): string {
       return erreur.statusCode >= 500
         ? `Le serveur a eu un problème. ${SECOURS_WHATSAPP}`
         : erreur.message;
+  }
+}
+
+/* ── Paiement mobile money direct (charge, sans carte) ─────────────── */
+
+/**
+ * Le parcours par défaut : charge mobile money directe (MTN, Orange,
+ * Wave), sans carte bancaire et sans redirection.
+ *
+ * L'ancien parcours (Paystack `initialize` + redirection vers
+ * `authorizationUrl`, cartes incluses) reste en place et reprend la main
+ * quand `NEXT_PUBLIC_PAYSTACK_CHARGE_ENABLED` vaut `"0"`. Les cartes sont
+ * une décision produit abandonnée : l'ancien parcours ne sert qu'en
+ * repli, jamais comme choix proposé.
+ *
+ * Montant : toujours issu du serveur (total figé, minimum du sprint),
+ * jamais saisi. Secrets : on ne collecte ni PIN ni OTP ni code — seul le
+ * numéro de téléphone transite, et rien de sensible n'est journalisé.
+ */
+
+/** Les seuls opérateurs proposés. Pas de carte, par décision produit. */
+export type OperateurMobile = "mtn" | "orange" | "wave";
+
+export const OPERATEURS_MOBILES: ReadonlyArray<{
+  code: OperateurMobile;
+  nom: string;
+  detail: string;
+}> = [
+  { code: "mtn", nom: "MTN", detail: "MTN Mobile Money" },
+  { code: "orange", nom: "Orange", detail: "Orange Money" },
+  { code: "wave", nom: "Wave", detail: "Wave" },
+];
+
+/** Vrai sauf repli explicite vers l'ancien parcours carte + redirection. */
+export const CHARGE_DIRECTE_ACTIVE =
+  process.env.NEXT_PUBLIC_PAYSTACK_CHARGE_ENABLED !== "0";
+
+/**
+ * Le numéro tel que le back l'exige pour la charge : E.164 ivoirien
+ * strict, chiffres seuls (`225` suivi de 10 chiffres, sans `+`).
+ * `null` pour tout le reste — y compris un E.164 non ivoirien : la charge
+ * n'accepte que les numéros ivoiriens.
+ */
+export function telephoneChargeStrict(e164: string): string | null {
+  const chiffres = e164.startsWith("+") ? e164.slice(1) : e164;
+  return /^225\d{10}$/.test(chiffres) ? chiffres : null;
+}
+
+/**
+ * Ce que rend l'initiation d'une charge. `status` est le statut de la
+ * réservation (`PENDING`, ou `SUCCESS` si le débit est déjà confirmé) :
+ * voir `classeStatutCharge`. Seule la référence est garantie.
+ * `authorizationUrl` n'est renseignée que si le back a basculé sur
+ * l'ancien flux checkout (charge désactivée côté serveur) : le site
+ * redirige alors comme avant au lieu d'attendre ici.
+ */
+export type ChargeLancee = {
+  paymentId?: number;
+  reference: string;
+  status: string;
+  /** La consigne opérateur (`display_text`) : « validez sur votre téléphone ». */
+  displayText?: string | null;
+  authorizationUrl?: string | null;
+};
+
+/**
+ * Demande le débit du numéro : `POST initialize` avec le montant (entier
+ * XOF, issu du serveur) plus `provider` et `phone` — la même route que
+ * l'ancien flux, qui conserve le checkout sans `provider`. `phone` part
+ * au format strict `225XXXXXXXXXX` (voir `telephoneChargeStrict`) : c'est
+ * le seul que le back accepte.
+ */
+export async function initieChargeMobile(
+  idInscription: number,
+  montantXof: number,
+  jeton: string,
+  operateur: OperateurMobile,
+  telephone: string,
+): Promise<ChargeLancee> {
+  const reponse = await api<Record<string, unknown>>(
+    `/payments/enrollments/${idInscription}/initialize`,
+    {
+      method: "POST",
+      jetonSuivi: jeton,
+      body: JSON.stringify({
+        amountXof: montantXof,
+        provider: operateur,
+        phone: telephone,
+      }),
+    },
+  );
+
+  const reference =
+    typeof reponse.reference === "string" && reponse.reference.length > 0
+      ? reponse.reference
+      : null;
+  if (!reference) {
+    throw new Error("Réponse de paiement illisible : référence manquante.");
+  }
+
+  const displayText = [
+    reponse.displayText,
+    reponse.display_text,
+    reponse.displayMessage,
+  ].find(
+    (valeur): valeur is string =>
+      typeof valeur === "string" && valeur.length > 0,
+  );
+
+  const authorizationUrl =
+    typeof reponse.authorizationUrl === "string" &&
+    reponse.authorizationUrl.length > 0
+      ? reponse.authorizationUrl
+      : null;
+
+  return {
+    paymentId:
+      typeof reponse.paymentId === "number" ? reponse.paymentId : undefined,
+    reference,
+    status:
+      typeof reponse.status === "string" && reponse.status.length > 0
+        ? reponse.status
+        : "PENDING",
+    displayText: displayText ?? null,
+    authorizationUrl,
+  };
+}
+
+/** Le statut d'une charge, ramené à trois issues pour l'affichage. */
+export type IssueCharge = "succes" | "attente" | "echec";
+
+/**
+ * `SUCCESS` → réglé ; `FAILED` / `ABANDONED` → raté ; tout le reste
+ * (`PENDING`, `pay_offline`, statuts intermédiaires) → en attente de la
+ * validation sur le téléphone.
+ */
+export function classeStatutCharge(status: string): IssueCharge {
+  if (status === "SUCCESS") return "succes";
+  if (status === "FAILED" || status === "ABANDONED") return "echec";
+  return "attente";
+}
+
+/** La fenêtre laissée pour valider sur le téléphone : 180 s. */
+export const FENETRE_CHARGE_MS = 180_000;
+
+/** L'intervalle entre deux vérifications du statut pendant la fenêtre. */
+export const INTERVALLE_VERIF_CHARGE_MS = 5_000;
+
+/**
+ * Une charge lancée depuis ce navigateur. `reference` est la clé de
+ * stockage ; `telephone` est au format strict `225XXXXXXXXXX`, sans PIN
+ * ni OTP — on n'en collecte jamais. `initieeA` (`Date.now()`) fait
+ * démarrer le compte à rebours.
+ */
+export type TraceCharge = TracePaiement & {
+  operateur: OperateurMobile;
+  telephone: string;
+  initieeA: number;
+};
+
+/** Range la charge (référence + montant + opérateur) : survit à la fermeture. */
+export function rangeCharge(reference: string, trace: TraceCharge) {
+  ecrit(`${PREFIXE}.charge.${reference}`, JSON.stringify(trace));
+  ecrit(`${PREFIXE}.derniere-charge.${trace.idInscription}`, reference);
+}
+
+/** La charge d'une référence, ou `null` (trace absente ou illisible). */
+export function litCharge(reference: string): TraceCharge | null {
+  const brut = lit(`${PREFIXE}.charge.${reference}`);
+  if (!brut) return null;
+
+  try {
+    const trace = JSON.parse(brut) as Partial<TraceCharge>;
+    const operateurValide =
+      trace.operateur === "mtn" ||
+      trace.operateur === "orange" ||
+      trace.operateur === "wave";
+    return trace &&
+      typeof trace === "object" &&
+      typeof trace.jeton === "string" &&
+      typeof trace.idInscription === "number" &&
+      typeof trace.montantXof === "number" &&
+      typeof trace.telephone === "string" &&
+      typeof trace.initieeA === "number" &&
+      operateurValide
+      ? (trace as TraceCharge)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/** La dernière charge de ce dossier sur cet appareil, pour la reprendre. */
+export function derniereCharge(idInscription: number): {
+  reference: string;
+  trace: TraceCharge;
+} | null {
+  const reference = lit(`${PREFIXE}.derniere-charge.${idInscription}`);
+  if (!reference) return null;
+  const trace = litCharge(reference);
+  return trace ? { reference, trace } : null;
+}
+
+/** Oublie la « dernière charge » d'un dossier (réglée, ratée, dépassée). */
+export function effaceDerniereCharge(idInscription: number) {
+  try {
+    localStorage.removeItem(`${PREFIXE}.derniere-charge.${idInscription}`);
+  } catch {
+    // Stockage indisponible : rien à oublier.
   }
 }
