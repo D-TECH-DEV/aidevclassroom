@@ -1,7 +1,7 @@
 import { BoutonReserver } from "@/components/inscription/BoutonReserver";
 import { EtiquetteSection } from "@/components/ui/EtiquetteSection";
 import { Reveal } from "@/components/motion/Reveal";
-import { A_DETERMINER, type Edition } from "@/lib/edition";
+import type { Edition } from "@/lib/edition";
 
 /**
  * Section — le parcours.
@@ -14,9 +14,11 @@ import { A_DETERMINER, type Edition } from "@/lib/edition";
  * session « Bientôt » reste en creux, sans bouton — l'API refuse
  * d'ailleurs toute inscription hors `ACTIVE`, un bouton ici mènerait
  * à une erreur garantie.
+ *
+ * Une session sans description n'affiche pas de description : pas de
+ * marqueur à la place. Le texte se saisit côté admin, et la carte se
+ * complète toute seule quand il arrive.
  */
-
-const A_COMPLETER = "[À COMPLÉTER]";
 
 function CarteSprint({
   numero,
@@ -63,9 +65,11 @@ function CarteSprint({
           {ligneFait}
         </p>
 
-        <p className="mt-[clamp(0.75rem,1.5svh,1rem)] font-mono text-small text-accent/70">
-          {sprint.description ?? `${A_COMPLETER} — description à saisir côté admin.`}
-        </p>
+        {sprint.description && (
+          <p className="mt-[clamp(0.75rem,1.5svh,1rem)] text-body text-fg/70">
+            {sprint.description}
+          </p>
+        )}
       </li>
     );
   }
@@ -86,9 +90,11 @@ function CarteSprint({
         {sprint.nom}
       </h3>
 
-      <p className="mt-[clamp(0.75rem,1.5svh,1rem)] text-body">
-        {sprint.description ?? `${A_COMPLETER} — description à saisir côté admin.`}
-      </p>
+      {sprint.description && (
+        <p className="mt-[clamp(0.75rem,1.5svh,1rem)] text-body">
+          {sprint.description}
+        </p>
+      )}
 
       <p className="mt-[clamp(0.75rem,1.5svh,1rem)] font-mono text-small font-bold">
         {ligneFait}
@@ -131,9 +137,10 @@ export function Parcours({ sprints }: { sprints: Edition[] }) {
             ))}
           </ul>
         ) : (
-          <p className="mt-[clamp(2.5rem,8svh,5rem)] max-w-[60ch] rounded-card border border-fg/10 p-[clamp(1.5rem,2.5vw,2rem)] font-mono text-small text-accent/70">
-            {A_DETERMINER} — aucun sprint n&apos;est publié pour l&apos;instant.
-            Les inscriptions ouvriront avec la prochaine session.
+          <p className="mt-[clamp(2.5rem,8svh,5rem)] max-w-[60ch] rounded-card border border-fg/10 p-[clamp(1.5rem,2.5vw,2rem)] text-body text-fg/70">
+            Aucune session n&apos;est ouverte pour l&apos;instant. La
+            prochaine sera annoncée ici, et les inscriptions ouvriront
+            avec elle.
           </p>
         )}
       </Reveal>

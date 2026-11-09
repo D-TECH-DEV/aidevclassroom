@@ -240,11 +240,15 @@ Réglés depuis :
       vérifié le 2026-11-07. Le relais et le panneau d'administration
       répondent tous les deux en production.
 - [x] **Le sprint #1 est `ACTIVE`** depuis le 2026-11-05 : `Portfolio`,
-      slug `portfolio`, **10 000 FCFA** (versement minimum 3 000),
-      50 places, le 2026-12-05 de 08h30 à 17h30. ⚠ Le prix ne correspond
-      pas aux 20 000 FCFA de l'affiche et de ce dépôt — le site affiche ce
-      que l'API dit (`edition.ts:83`), donc il annonce 10 000. **À
-      trancher avec Malik.**
+      slug `portfolio`, 50 places, le 2026-12-05 de 08h30 à 17h30.
+      ⚠ **Le prix bouge côté admin et le site suit sans broncher** :
+      10 000 FCFA au relevé du 2026-11-07, **15 000 FCFA** (versement
+      minimum 5 000) à celui du 2026-11-09. Ni l'un ni l'autre n'est le
+      20 000 de l'affiche et de `CLAUDE.md`. Le site affiche ce que l'API
+      dit (`edition.ts:83`) — c'est voulu, mais ça veut dire qu'une faute
+      de frappe dans le panneau se retrouve en vitrine dans les quinze
+      minutes (ISR, `revalider: 900`). **Le prix définitif est à acter
+      avec Malik, puis à figer côté admin.**
 - [x] **Le CORS n'est plus bloquant** — contourné, pas réglé. Le relais
       même-origine `src/app/api/[...chemin]/route.ts` fait passer les
       appels publics par le serveur Next, où la règle ne s'applique pas.
@@ -257,6 +261,21 @@ Réglés depuis :
       (`edition.ts`). Acté : le modèle `Sprint` ne les porte pas.
 
 ### Reste à faire côté site
+
+- [x] **Plus aucun marqueur de chantier sur le site public**
+      (2026-11-09), sauf les deux compteurs de places qui attendent le
+      champ de Youssouf. Règle posée : un trou de contenu ne s'affiche
+      pas au visiteur. Soit l'élément ne se rend pas du tout (question de
+      FAQ sans réponse, bio de formateur absente, description de session
+      vide, ligne de liens jamais fournie — supprimée), soit il s'écrit
+      en clair (« À annoncer » pour la date et le prix quand aucune
+      session n'est ouverte ou que l'API est muette). Rien n'est inventé :
+      les trous restent lisibles dans le code, aux endroits qui les
+      déclarent (`QUESTIONS` dans `Faq.tsx`, `FORMATEURS`).
+      ⚠ Conséquence à connaître : **le site ne signale plus ses propres
+      trous.** La question « Dois-je venir avec mon ordinateur ? » a
+      disparu de la FAQ, et la bio de Victorien n'apparaît nulle part.
+      Elles reviendront d'elles-mêmes dès que le texte sera écrit.
 
 - [ ] Décider ce qu'on fait du **paiement fractionné** : le sprint publié
       accepte des versements à partir de 3 000 FCFA (`minimumPaymentXof`),

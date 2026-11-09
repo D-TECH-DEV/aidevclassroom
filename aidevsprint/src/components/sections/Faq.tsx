@@ -10,10 +10,13 @@ import { Reveal } from "@/components/motion/Reveal";
  * quatre fois pour lire quatre phrases. Un filet sépare les entrées.
  *
  * La réponse sur l'ordinateur portait `[RÉPONSE À CONFIRMER]` dans le
- * design : elle reste marquée, pas inventée.
+ * design, et personne ne l'a tranchée depuis. Elle n'est pas inventée :
+ * **la question ne s'affiche pas tant que `reponse` vaut `null`.** Le
+ * trou reste visible ici, dans `QUESTIONS`, mais plus sur le site — une
+ * FAQ qui répond « à compléter » dit au visiteur que personne ne tient
+ * la page. Le jour où Malik donne la réponse, la question réapparaît
+ * toute seule.
  */
-
-const A_COMPLETER = "[À COMPLÉTER]";
 
 const QUESTIONS: { question: string; reponse: string | null }[] = [
   {
@@ -51,18 +54,17 @@ export function Faq() {
           </h2>
 
           <dl className="mt-[clamp(2rem,6svh,3.5rem)] border-t border-fg/15">
-            {QUESTIONS.map(({ question, reponse }) => (
+            {QUESTIONS.filter(
+              (entree): entree is { question: string; reponse: string } =>
+                entree.reponse !== null,
+            ).map(({ question, reponse }) => (
               <div
                 key={question}
                 className="border-b border-fg/15 py-[clamp(1.5rem,4svh,2.5rem)]"
               >
                 <dt className="text-h3 font-bold tracking-tight">{question}</dt>
-                <dd
-                  className={`mt-[clamp(0.625rem,1.5svh,1rem)] text-body ${
-                    reponse ? "text-fg/70" : "font-mono text-accent/70"
-                  }`}
-                >
-                  {reponse ?? `${A_COMPLETER} — la réponse n'est pas arrêtée.`}
+                <dd className="mt-[clamp(0.625rem,1.5svh,1rem)] text-body text-fg/70">
+                  {reponse}
                 </dd>
               </div>
             ))}

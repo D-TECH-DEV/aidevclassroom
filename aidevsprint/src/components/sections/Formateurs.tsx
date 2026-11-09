@@ -45,10 +45,12 @@ import { Reveal } from "@/components/motion/Reveal";
  *    voir `BadgeSuspendu` et `DELAI_BADGE`.
  *
  * Ce que transmettent Youssouf et Malik vient du brief, mot pour mot.
- * Celui de Victorien et les liens ne sont pas fournis : [À COMPLÉTER].
+ * Celui de Victorien n'a jamais été fourni, et aucun des trois n'a donné
+ * ses liens. Rien n'est inventé pour autant : **ce qui manque ne se rend
+ * pas.** La ligne « ce qu'il transmet » disparaît quand `transmet` vaut
+ * `null`, et la ligne de liens n'existe plus du tout — elle n'annonçait
+ * que son propre vide. Les trous restent lisibles dans `FORMATEURS`.
  */
-
-const A_COMPLETER = "[À COMPLÉTER]";
 
 /** Écart entre deux montages de canvas WebGL. Voir `BadgeSuspendu`. */
 const DELAI_BADGE = 260;
@@ -141,18 +143,9 @@ function Profil({ formateur, index }: { formateur: Formateur; index: number }) {
           </div>
         </div>
 
-        <p
-          className={`text-body ${
-            formateur.transmet ? "text-fg/70" : "font-mono text-accent/70"
-          }`}
-        >
-          {formateur.transmet ??
-            `${A_COMPLETER} — ce qu'il transmet ce jour-là.`}
-        </p>
-
-        <p className="font-mono text-small text-accent/70">
-          {A_COMPLETER} — GitHub, LinkedIn, portfolio
-        </p>
+        {formateur.transmet && (
+          <p className="text-body text-fg/70">{formateur.transmet}</p>
+        )}
       </div>
     </Reveal>
   );
