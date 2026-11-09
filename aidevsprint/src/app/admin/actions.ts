@@ -208,6 +208,7 @@ export async function creerNouveauSprint(
 
   revalidatePath("/admin/sprints");
   revalidatePath("/admin");
+  revalidatePath("/");
   redirect("/admin/sprints");
 }
 
@@ -282,6 +283,7 @@ export async function modifierSprintExistant(
 
   revalidatePath("/admin/sprints");
   revalidatePath("/admin");
+  revalidatePath("/");
   redirect("/admin/sprints");
 }
 
@@ -300,6 +302,7 @@ export async function supprimerSprintExistant(
   }
   revalidatePath("/admin/sprints");
   revalidatePath("/admin");
+  revalidatePath("/");
   return {};
 }
 
@@ -325,6 +328,7 @@ export async function changerStatutSprint(
 
   revalidatePath("/admin/sprints");
   revalidatePath("/admin");
+  revalidatePath("/");
   return {};
 }
 
