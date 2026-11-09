@@ -48,6 +48,17 @@ export interface LanyardProps {
   damping?: number;
   elasticity?: number;
   breeze?: number;
+  /**
+   * Décalage, en secondes, de l'horloge du vent au démarrage.
+   *
+   * Le vent est une fonction pure du temps, et chaque instance démarre
+   * son horloge à zéro : deux badges montés côte à côte se balancent
+   * donc exactement en phase, quelle que soit la seconde à laquelle ils
+   * sont apparus. Les écarter dans le temps ne suffit pas — le cycle
+   * dominant dure 11,86 s, un retard de montage de 260 ms n'en couvre
+   * que 2 %. C'est la phase qu'il faut décaler, pas le montage.
+   */
+  phase?: number;
   interactive?: boolean;
   intro?: boolean;
   className?: string;
@@ -897,6 +908,7 @@ const Lanyard = ({
   damping = 0.5,
   elasticity = 0.5,
   breeze = 0.5,
+  phase = 0,
   interactive = true,
   intro = true,
   className = '',
@@ -1050,7 +1062,9 @@ const Lanyard = ({
     let tileRatio = 2;
     let raf = 0;
     let last = performance.now();
-    let time = 0;
+    // Pas zéro : `phase` décale l'horloge du vent pour que deux badges
+    // de la même page ne se balancent pas du même côté au même instant.
+    let time = phase;
     let visible = true;
     let alive = true;
     let placed = false;
