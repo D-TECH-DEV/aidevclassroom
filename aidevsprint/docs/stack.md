@@ -201,7 +201,8 @@ participant ne peut plus ni suivre son dossier ni payer.
 ### Ce que Youssouf doit faire de son côté
 
 > Tout ce qui suit lui est expliqué, mesures et commandes à l'appui, dans
-> [pour-youssouf.md](./pour-youssouf.md) — le document à lui transmettre.
+> [demandes-api.md](./demandes-api.md) — le document à lui transmettre.
+> `pour-youssouf.md` est le relevé du 2 novembre, périmé depuis.
 
 
 > Relevé du 2026-11-07 : l'essentiel est fait. Le site est en ligne sur
