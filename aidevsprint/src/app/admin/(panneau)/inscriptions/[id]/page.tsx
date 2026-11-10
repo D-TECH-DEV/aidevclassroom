@@ -191,6 +191,12 @@ async function Contenu({ params }: Params) {
               {fiche.plan === "DUO" ? (
                 <Ligne2 cle="Tél. binôme" valeur={fiche.partnerPhone ?? "—"} />
               ) : null}
+              {fiche.plan === "DUO" ? (
+                <Ligne2
+                  cle="E-mail binôme"
+                  valeur={fiche.partnerEmail ?? "—"}
+                />
+              ) : null}
               <Ligne2 cle="Inscrit le" valeur={date(fiche.createdAt)} />
             </dl>
           </Cadre>

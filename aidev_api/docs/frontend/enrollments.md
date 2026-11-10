@@ -11,7 +11,7 @@ Basé sur [enrollments.controller.ts](../../src/enrollments/enrollments.controll
 
 Chaque inscription fige son total au moment de l'inscription (RG04) : `totalAmountXof = priceXof` en `SINGLE`, `= duoPriceXof` en `DUO`. Champs calculés présents sur liste/détail/statut : `totalPaidXof` (somme des `SUCCESS`) et `remainingAmountXof` (`max(0, total − paid)`).
 
-Forfaits (`EnrollmentPlan` : `SINGLE | DUO`, défaut `SINGLE`) : un dossier `DUO` couvre 2 places (nom, prénom et numéro du binôme requis, `400 PARTNER_REQUIRED`), compte 2 places de capacité, et utilise le minimum duo pour ses versements quand il est défini. `DUO` sans prix duo au catalogue → `422 DUO_NOT_AVAILABLE`. Forfait inconnu → `400 INVALID_PLAN`.
+Forfaits (`EnrollmentPlan` : `SINGLE | DUO`, défaut `SINGLE`) : un dossier `DUO` couvre 2 places (nom, prénom, numéro et e-mail du binôme requis — `400 PARTNER_REQUIRED` / `PARTNER_EMAIL_INVALID`, l'e-mail du binôme devant être différent de celui de l'inscription), compte 2 places de capacité, et utilise le minimum duo pour ses versements quand il est défini. `DUO` sans prix duo au catalogue → `422 DUO_NOT_AVAILABLE`. Forfait inconnu → `400 INVALID_PLAN`.
 
 ## `POST /api/v1/enrollments` — publique, 20/min
 
@@ -22,13 +22,14 @@ Forfaits (`EnrollmentPlan` : `SINGLE | DUO`, défaut `SINGLE`) : un dossier `DUO
   "partnerFirstName": "Ibrahim",
   "partnerLastName": "Diallo",
   "partnerPhone": "+2250700000001",
+  "partnerEmail": "ibrahim@exemple.com",
   "student": { "firstName": "Awa", "lastName": "Diallo", "email": "awa@exemple.com", "phone": "+2250700000000" }
 }
 ```
 
 - Le sprint doit exister et être `ACTIVE`, sinon `404 SPRINT_NOT_FOUND` ou `422 SPRINT_NOT_ACTIVE`.
 - Capacité : somme des places des non-`CANCELLED` (`SINGLE` = 1, `DUO` = 2) ; plein → `409 SPRINT_CAPACITY_REACHED`.
-- Doublon (même étudiant + même sprint) → `409 DUPLICATE_ENROLLMENT` (contrainte unique Prisma rattrapée aussi en `P2002`).
+- Doublon (même étudiant + même sprint, ou e-mail déjà présent comme titulaire ou binome sur ce sprint) → `409 DUPLICATE_ENROLLMENT` (contrainte unique Prisma rattrapée aussi en `P2002`).
 
 Réponse `201` (seule réponse contenant le token en clair) :
 
@@ -50,7 +51,7 @@ Réponse `201` (seule réponse contenant le token en clair) :
 { "email": "awa@exemple.com" }
 ```
 
-Retrouve les dossiers d'un e-mail depuis n'importe quel appareil, sans OTP. Pour chaque dossier, l'API **re-emet un jeton** (rotation : l'ancien est remplacé) et le renvoie avec le résumé + soldes :
+Retrouve les dossiers d'un e-mail depuis n'importe quel appareil, sans OTP — l'e-mail matche le titulaire **ou** le binome : en forfait `DUO`, les deux adresses retrouvent le même dossier. Pour chaque dossier, l'API **re-emet un jeton** (rotation : l'ancien est remplacé) et le renvoie avec le résumé + soldes :
 
 ```json
 { "data": { "dossiers": [{ "id": 45, "trackingToken": "…", "remainingAmountXof": 35000 }] }, "meta": {} }

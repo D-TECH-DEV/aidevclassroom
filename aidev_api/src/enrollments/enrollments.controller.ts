@@ -35,6 +35,7 @@ export class EnrollmentsController {
       firstName: dto.partnerFirstName,
       lastName: dto.partnerLastName,
       phone: dto.partnerPhone,
+      email: dto.partnerEmail,
     });
   }
 

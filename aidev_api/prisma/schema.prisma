@@ -94,6 +94,7 @@ model Enrollment {
   partnerFirstName String?          @map("partner_first_name") @db.VarChar(100)
   partnerLastName  String?          @map("partner_last_name") @db.VarChar(100)
   partnerPhone     String?          @map("partner_phone") @db.VarChar(30)
+  partnerEmail     String?          @map("partner_email") @db.VarChar(190)
   status           EnrollmentStatus @default(PENDING)
   trackingTokenHash String          @map("tracking_token_hash") @db.VarChar(255)
   createdAt        DateTime         @default(now()) @map("created_at")
@@ -106,6 +107,7 @@ model Enrollment {
   @@index([studentId])
   @@index([sprintId])
   @@index([status])
+  @@index([partnerEmail])
   @@map("enrollments")
 }
 

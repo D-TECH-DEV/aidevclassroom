@@ -44,6 +44,11 @@ export class CreateEnrollmentDto {
   })
   partnerPhone?: string;
 
+  @IsOptional()
+  @IsEmail({}, { message: 'E-mail binome invalide.' })
+  @MaxLength(190)
+  partnerEmail?: string;
+
   @ValidateNested()
   @Type(() => StudentInputDto)
   @IsNotEmpty()

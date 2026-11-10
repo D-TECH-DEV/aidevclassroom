@@ -14,6 +14,7 @@ function makePrisma(
         Array.from({ length: seats }, () => ({ plan: 'SINGLE' })),
       ),
       findUnique: jest.fn(async () => opts.existing ?? null),
+      findFirst: jest.fn(async () => null),
       create: jest.fn(async ({ data }: never) => {
         const row = { id: 1, ...(data as object) };
         created.push(row);
@@ -127,6 +128,7 @@ describe('EnrollmentsService (RG01/RG04/RG13/RG14)', () => {
       firstName: 'Ibrahim',
       lastName: 'Diallo',
       phone: '+2250700000001',
+      email: 'Ibrahim@Example.com',
     });
     expect(created[0]).toMatchObject({
       plan: 'DUO',
@@ -134,6 +136,7 @@ describe('EnrollmentsService (RG01/RG04/RG13/RG14)', () => {
       partnerFirstName: 'Ibrahim',
       partnerLastName: 'Diallo',
       partnerPhone: '+2250700000001',
+      partnerEmail: 'ibrahim@example.com',
     });
     // Forfait inconnu : refuse.
     await expect(svc.create(1, student, 'TRIO')).rejects.toMatchObject({
@@ -197,6 +200,7 @@ describe('EnrollmentsService (RG01/RG04/RG13/RG14)', () => {
         firstName: 'Ibrahim',
         lastName: 'Diallo',
         phone: '+2250700000001',
+        email: 'ibrahim@example.com',
       }),
     ).rejects.toMatchObject({
       response: expect.objectContaining({ code: 'SPRINT_CAPACITY_REACHED' }),
@@ -243,13 +247,115 @@ describe('EnrollmentsService (RG01/RG04/RG13/RG14)', () => {
   it('e-mail inconnu : aucun dossier, sans devoiler', async () => {
     const prisma = {
       student: { findUnique: jest.fn(async () => null) },
-      enrollment: { findMany: jest.fn() },
+      enrollment: { findMany: jest.fn(async () => []) },
     };
     const svc = new EnrollmentsService(prisma as never);
     await expect(svc.findByEmail('inconnu@example.com')).resolves.toEqual({
       dossiers: [],
     });
-    expect(prisma.enrollment.findMany).not.toHaveBeenCalled();
+  });
+
+  it('forfait DUO exige un e-mail binome distinct et valide', async () => {
+    const sprint = {
+      id: 1,
+      status: 'ACTIVE',
+      priceXof: 50000,
+      duoPriceXof: 80000,
+      capacity: null,
+    };
+    const binome = {
+      firstName: 'Ibrahim',
+      lastName: 'Diallo',
+      phone: '+2250700000001',
+    };
+    // Sans e-mail binome : refuse.
+    const { prisma: prisma1 } = makePrisma(sprint);
+    const svc1 = new EnrollmentsService(prisma1 as never);
+    await expect(svc1.create(1, student, 'DUO', binome)).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'PARTNER_EMAIL_INVALID' }),
+    });
+    // E-mail binome identique a celui de l'inscription : refuse.
+    const { prisma: prisma2 } = makePrisma(sprint);
+    const svc2 = new EnrollmentsService(prisma2 as never);
+    await expect(
+      svc2.create(1, student, 'DUO', { ...binome, email: student.email }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'PARTNER_EMAIL_INVALID' }),
+    });
+  });
+
+  it('le binome ne peut pas recreer un dossier avec son e-mail (doublon)', async () => {
+    const sprint = {
+      id: 1,
+      status: 'ACTIVE',
+      priceXof: 50000,
+      duoPriceXof: 80000,
+      capacity: null,
+    };
+    const binome = {
+      firstName: 'Ibrahim',
+      lastName: 'Diallo',
+      phone: '+2250700000001',
+      email: 'ibrahim@example.com',
+    };
+    // Un dossier existe deja avec cet e-mail (titulaire ou binome) :
+    // la transaction voit le conflit et refuse le second dossier.
+    const prismaTx = {
+      sprint: { findUnique: jest.fn(async () => sprint) },
+      $transaction: jest.fn(async (fn: (tx: unknown) => unknown) =>
+        fn({
+          enrollment: {
+            findMany: jest.fn(async () => []),
+            findUnique: jest.fn(async () => null),
+            findFirst: jest.fn(async () => ({ id: 9 })),
+            create: jest.fn(),
+          },
+          student: {
+            findUnique: jest.fn(async () => null),
+            create: jest.fn(async () => ({ id: 2 })),
+          },
+        }),
+      ),
+    };
+    const svcConflict = new EnrollmentsService(prismaTx as never);
+    await expect(
+      svcConflict.create(
+        1,
+        { ...student, email: 'nouveau@example.com' },
+        'DUO',
+        binome,
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'DUPLICATE_ENROLLMENT' }),
+    });
+  });
+
+  it("findByEmail retrouve le dossier DUO par l'e-mail du binome", async () => {
+    const row = {
+      id: 7,
+      totalAmountXof: 80000,
+      plan: 'DUO',
+      partnerEmail: 'ibrahim@example.com',
+      payments: [{ status: 'SUCCESS', amountXof: 10000 }],
+      sprint: { id: 1, name: 'Sprint', slug: 's', status: 'ACTIVE' },
+      trackingTokenHash: 'ancien',
+      studentId: 2,
+    };
+    const prisma = {
+      // L'e-mail du binome n'est celui d'aucun titulaire.
+      student: { findUnique: jest.fn(async () => null) },
+      enrollment: {
+        findMany: jest.fn(async () => [row]),
+        update: jest.fn(async ({ data }: never) => data),
+      },
+    };
+    const svc = new EnrollmentsService(prisma as never);
+    const out = await svc.findByEmail('Ibrahim@Example.com');
+    expect(out.dossiers).toHaveLength(1);
+    expect(out.dossiers[0]).toMatchObject({ remainingAmountXof: 70000 });
+    expect(
+      (out.dossiers[0] as { trackingToken: string }).trackingToken,
+    ).toMatch(/^[0-9a-f]{64}$/);
   });
 
   it('cloture COMPLETED exige un solde nul (RG07)', async () => {

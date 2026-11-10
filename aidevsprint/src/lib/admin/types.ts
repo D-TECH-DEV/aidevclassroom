@@ -110,6 +110,7 @@ export type Inscription = {
   partnerFirstName?: string | null;
   partnerLastName?: string | null;
   partnerPhone?: string | null;
+  partnerEmail?: string | null;
   totalAmountXof: number;
   /** Somme des paiements `SUCCESS`. Présent sur liste, détail et statut. */
   totalPaidXof?: number;

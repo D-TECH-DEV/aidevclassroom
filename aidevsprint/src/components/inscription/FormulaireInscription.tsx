@@ -76,7 +76,8 @@ type NomChamp =
   | "telephone"
   | "binomePrenom"
   | "binomeNom"
-  | "binomeTelephone";
+  | "binomeTelephone"
+  | "binomeEmail";
 type Erreurs = Partial<Record<NomChamp | "global", string>>;
 type Etat = "repos" | "envoi" | "ok";
 type Forfait = "SINGLE" | "DUO";
@@ -89,6 +90,7 @@ const VIDE: Record<NomChamp, string> = {
   binomePrenom: "",
   binomeNom: "",
   binomeTelephone: "",
+  binomeEmail: "",
 };
 
 /**
@@ -134,6 +136,18 @@ function verifie(
       erreurs.binomeTelephone = valeurs.binomeTelephone.trim()
         ? "Numéro incomplet. Dix chiffres, ou l'indicatif du pays."
         : "Le numéro du binôme est obligatoire.";
+    // L'e-mail du binôme est obligatoire : c'est avec lui qu'il
+    // retrouvera ce dossier et paiera le reste depuis son appareil.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(valeurs.binomeEmail.trim())) {
+      erreurs.binomeEmail = valeurs.binomeEmail.trim()
+        ? "Cette adresse email n'est pas valide."
+        : "L'e-mail du binôme est obligatoire.";
+    } else if (
+      valeurs.binomeEmail.trim().toLowerCase() ===
+      valeurs.email.trim().toLowerCase()
+    ) {
+      erreurs.binomeEmail = "L'e-mail du binôme doit être différent du tien.";
+    }
   }
 
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(valeurs.email.trim())) {
@@ -353,6 +367,15 @@ export function FormulaireInscription({ edition }: { edition: Edition }) {
       setReprise(null);
       setRepriseRatee(false);
     }
+    // L'erreur d'égalité des deux e-mails vit sur le champ binôme :
+    // retaper l'e-mail principal peut la résoudre, on l'efface aussi.
+    if (champ === "email") {
+      setErreurs((precedentes) => {
+        const suivantes = { ...precedentes };
+        delete suivantes.binomeEmail;
+        return suivantes;
+      });
+    }
   };
 
   /**
@@ -446,6 +469,7 @@ export function FormulaireInscription({ edition }: { edition: Edition }) {
                   partnerFirstName: valeurs.binomePrenom.trim(),
                   partnerLastName: valeurs.binomeNom.trim(),
                   partnerPhone: normaliseTelephone(valeurs.binomeTelephone),
+                  partnerEmail: valeurs.binomeEmail.trim().toLowerCase(),
                 }
               : {}),
             student: {
@@ -804,6 +828,22 @@ export function FormulaireInscription({ edition }: { edition: Edition }) {
           inputMode="tel"
           autoComplete="off"
           placeholder="07 04 92 10 80"
+        />
+
+        <Champ
+          nom="binomeEmail"
+          etiquette="E-mail du binôme"
+          aide="C'est avec cet e-mail que ton binôme retrouvera ce dossier et paiera le reste."
+          valeur={valeurs.binomeEmail}
+          onChange={ecrit("binomeEmail")}
+          erreur={erreurs.binomeEmail}
+          type="email"
+          inputMode="email"
+          autoComplete="off"
+          autoCapitalize="none"
+          autoCorrect="off"
+          maxLength={190}
+          placeholder="awa@exemple.ci"
         />
         </>
       ) : null}

@@ -41,7 +41,12 @@ export class EnrollmentsService {
       phone: string;
     },
     planInput?: string,
-    partnerInput?: { firstName?: string; lastName?: string; phone?: string },
+    partnerInput?: {
+      firstName?: string;
+      lastName?: string;
+      phone?: string;
+      email?: string;
+    },
   ) {
     const sprint = await this.prisma.sprint.findUnique({
       where: { id: sprintId },
@@ -74,9 +79,11 @@ export class EnrollmentsService {
         message: 'Le forfait duo est indisponible pour ce Sprint.',
       });
     }
+    const n = normalizeStudentInput(studentInput);
     const partnerFirstName = partnerInput?.firstName?.trim() ?? '';
     const partnerLastName = partnerInput?.lastName?.trim() ?? '';
     const partnerPhone = (partnerInput?.phone ?? '').replace(/[\s-]/g, '');
+    const partnerEmail = (partnerInput?.email ?? '').trim().toLowerCase();
     if (
       plan === 'DUO' &&
       (partnerFirstName.length < 2 ||
@@ -89,11 +96,28 @@ export class EnrollmentsService {
           'Le nom et le numero du binome sont requis pour le forfait duo.',
       });
     }
+    if (plan === 'DUO') {
+      // L'e-mail du binome est requis : c'est avec lui que le binome
+      // retrouvera ce dossier (reprise du solde) depuis son appareil.
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(partnerEmail)) {
+        throw new BadRequestException({
+          code: 'PARTNER_EMAIL_INVALID',
+          message:
+            "L'e-mail du binome est requis pour le forfait duo : c'est avec lui qu'il retrouvera ce dossier.",
+        });
+      }
+      if (partnerEmail === n.email) {
+        throw new BadRequestException({
+          code: 'PARTNER_EMAIL_INVALID',
+          message:
+            "L'e-mail du binome doit etre different de celui de l'inscription.",
+        });
+      }
+    }
     // RG04 : prix fige selon le forfait choisi.
     const total =
       plan === 'DUO' ? (sprintDuo.duoPriceXof as number) : sprint.priceXof;
     const seatsNeeded = plan === 'DUO' ? 2 : 1;
-    const n = normalizeStudentInput(studentInput);
     // Capacite + doublon + creation dans une transaction (RG14, anti-concurrence).
     // Un dossier DUO occupe 2 places.
     try {
@@ -129,6 +153,31 @@ export class EnrollmentsService {
             message: 'Ce participant est deja inscrit a ce Sprint.',
           });
         }
+        // Anti-doublon par e-mail (titulaire ou binome) : chaque adresse
+        // ne porte qu'un dossier par sprint, quel que soit le rôle tenu.
+        // Sans cela, le binome pourrait recréer un second dossier avec
+        // son propre e-mail, et les deux adresses ne convergeraient plus.
+        const emailConflict = await tx.enrollment.findFirst({
+          where: {
+            sprintId,
+            OR: [
+              { partnerEmail: n.email },
+              ...(plan === 'DUO'
+                ? [
+                    { partnerEmail: partnerEmail },
+                    { student: { email: partnerEmail } },
+                  ]
+                : []),
+            ],
+          },
+          select: { id: true },
+        });
+        if (emailConflict) {
+          throw new ConflictException({
+            code: 'DUPLICATE_ENROLLMENT',
+            message: 'Ce participant est deja inscrit a ce Sprint.',
+          });
+        }
         const trackingToken = randomBytes(32).toString('hex');
         const enrollment = await tx.enrollment.create({
           data: {
@@ -139,6 +188,7 @@ export class EnrollmentsService {
             partnerFirstName: plan === 'DUO' ? partnerFirstName : null,
             partnerLastName: plan === 'DUO' ? partnerLastName : null,
             partnerPhone: plan === 'DUO' ? partnerPhone : null,
+            partnerEmail: plan === 'DUO' ? partnerEmail : null,
             status: 'PENDING',
             trackingTokenHash: hashTrackingToken(trackingToken),
           },
@@ -165,43 +215,57 @@ export class EnrollmentsService {
    * Retrouve les dossiers d'un e-mail et re-emet un jeton de suivi par
    * dossier (rotation). Le jeton d'origine n'est stocke que hache et ne
    * peut pas etre relu : on en genere un nouveau et on remplace le hash.
-   * Sans OTP, quiconque connait l'e-mail obtient l'acces — assume.
+   * L'e-mail matche le titulaire OU le binome (forfait DUO) : les deux
+   * adresses retrouvent le meme dossier. Sans OTP, quiconque connait
+   * l'e-mail obtient l'acces — assume.
    */
   async findByEmail(email: string) {
     const clean = email.trim().toLowerCase();
     const student = await this.prisma.student.findUnique({
       where: { email: clean },
     });
-    if (!student) {
-      return { dossiers: [] };
-    }
-    const enrollments = await this.prisma.enrollment.findMany({
-      where: { studentId: student.id },
-      include: {
-        sprint: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-            status: true,
-            minimumPaymentXof: true,
-          },
-        },
-        payments: {
-          orderBy: { createdAt: 'desc' },
-          select: {
-            id: true,
-            amountXof: true,
-            currency: true,
-            reference: true,
-            status: true,
-            authorizationUrl: true,
-            paidAt: true,
-            createdAt: true,
-          },
+    const include = {
+      sprint: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          status: true,
+          minimumPaymentXof: true,
         },
       },
+      payments: {
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          amountXof: true,
+          currency: true,
+          reference: true,
+          status: true,
+          authorizationUrl: true,
+          paidAt: true,
+          createdAt: true,
+        },
+      },
+    } as const;
+    const byStudent = student
+      ? await this.prisma.enrollment.findMany({
+          where: { studentId: student.id },
+          include,
+          orderBy: { createdAt: 'desc' },
+        })
+      : [];
+    // Dossiers DUO dont cet e-mail est celui du binome.
+    const byPartner = await this.prisma.enrollment.findMany({
+      where: { partnerEmail: clean },
+      include,
       orderBy: { createdAt: 'desc' },
+    });
+    const seen = new Set<number>();
+    const enrollments = [...byStudent, ...byPartner].filter((e) => {
+      if (seen.has(e.id)) return false;
+      seen.add(e.id);
+      return true;
     });
     const dossiers = await Promise.all(
       enrollments.map(async (e) => {

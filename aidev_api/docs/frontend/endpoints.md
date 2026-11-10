@@ -56,7 +56,7 @@ Préfixe `/admins`, tout JWT `ADMIN`.
 
 | Méthode | Chemin | Auth | Body / Query | Réponse |
 |---|---|---|---|---|
-| `POST` | `/enrollments` | non (20/min) | `{ sprintId >0, plan?: SINGLE\|DUO, partnerFirstName?, partnerLastName?, partnerPhone?, student: {...} }` | `201 { enrollment, trackingToken }` ; `400 INVALID_PLAN / PARTNER_REQUIRED`, `422 DUO_NOT_AVAILABLE`, `404 SPRINT_NOT_FOUND`, `422 SPRINT_NOT_ACTIVE`, `409 CAPACITY / DUPLICATE` |
+| `POST` | `/enrollments` | non (20/min) | `{ sprintId >0, plan?: SINGLE\|DUO, partnerFirstName?, partnerLastName?, partnerPhone?, partnerEmail?, student: {...} }` | `201 { enrollment, trackingToken }` ; `400 INVALID_PLAN / PARTNER_REQUIRED / PARTNER_EMAIL_INVALID`, `422 DUO_NOT_AVAILABLE`, `404 SPRINT_NOT_FOUND`, `422 SPRINT_NOT_ACTIVE`, `409 CAPACITY / DUPLICATE` |
 | `POST` | `/enrollments/by-email` | non (10/min) | `{ email }` | `200 { dossiers: [{ ..., trackingToken }] }` (rotation), `[]` si inconnu |
 | `GET` | `/admin/enrollments?page&limit&sprintId&status&search` | ADMIN | filtres combinables | items enrichis (`totalPaidXof`, `remainingAmountXof`) |
 | `GET` | `/admin/enrollments/:id` | ADMIN | — | détail + soldes ; `404` |
