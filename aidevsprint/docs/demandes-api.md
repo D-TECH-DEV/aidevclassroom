@@ -12,47 +12,38 @@ premières se voient par le visiteur, les deux autres non.
 
 ---
 
-## 1. Un compteur d'inscrits sur la route publique — **bloquant**
+## 1. Le compteur d'inscrits — **écrit, pas déployé**
 
-C'est la seule chose qui manque pour que le site n'affiche plus aucun
-`[À DÉTERMINER]`. Le marqueur apparaît deux fois, aux deux endroits qui
-vendent l'urgence : la pastille du hero et la barre d'action mobile.
+⚠️ **Cette demande est satisfaite dans le code, et c'est le déploiement
+qui manque.** Relevé le 2026-11-10 :
 
-`GET /sprints` donne la capacité, jamais le remplissage :
+- `f28a6cb feat(sprints): compteur public d'inscrits (minimum versé)`
+  ajoute `enrolledCount` et `enrolledSeats` au catalogue public, avec
+  ses tests (`enrolled-count.util.spec.ts`) ;
+- `e66feaf feat(front): jauge et bandeau calés sur le quota du sprint
+  ouvert` branche la jauge et la barre mobile dessus.
 
-```
-$ curl -s https://aidev.you-soft.com/api/v1/sprints/1
-{"id":1,"name":"Portfolio", ... "capacity":50,"status":"ACTIVE"}
-```
-
-Aucune route publique ne le porte ailleurs — six chemins plausibles
-essayés, les six répondent `404` :
+Les deux sont sur **`develop` uniquement**. `main` s'arrête à `23a70f6`,
+juste avant. Et aucune des deux API en ligne ne sert les champs :
 
 ```
-GET /enrollments?sprintId=1   404      GET /sprints/1/seats          404
-GET /enrollments              404      GET /sprints/1/availability   404
-GET /sprints/1/enrollments    404      GET /sprints/1/stats          404
+aidev.you-soft.com/api/v1/sprints/1    12 champs, pas de enrolledSeats
+ai-devclassroom.com/api/sprints        14 champs (duoPriceXof…),
+                                       toujours pas de enrolledSeats
 ```
 
-Le décompte n'existe que derrière `/admin`, donc derrière le JWT — qui
-ne doit jamais atteindre le navigateur. Sans ce champ, le site ne peut
-pas écrire « il reste N places » sans l'inventer, et il ne l'inventera
-pas.
+Deux déploiements distincts, donc, et celui qui sert le site public est
+le plus récent des deux — mais tous deux sont en retard sur `develop`.
 
-**Demandé :** un entier sur le `Sprint` public, par exemple
-`enrolledCount`, à côté de `capacity`. Rien d'autre — surtout pas la
-liste des inscrits, qui est de la donnée personnelle et n'a rien à faire
-sur une route publique.
+**Ce qui reste à faire : déployer.** Rien à coder. Tant que ce n'est pas
+fait, la jauge du hero et la barre mobile affichent `[À DÉTERMINER]`,
+et c'est le dernier marqueur que le code produit encore.
 
-**⚠ Une question à trancher avant de coder, et c'est à Malik :** une
-inscription `PENDING` non payée compte-t-elle une place ? Si oui, un
-visiteur qui ouvre le formulaire et abandonne fait baisser le compteur
-pour tout le monde. Si non, le sprint peut se retrouver survendu. Les
-deux se défendent, mais il faut choisir — ne pas deviner.
-
-Côté site, tout est déjà branché : il suffira de remplir `inscrits` dans
-`src/lib/edition.ts` (une ligne), la jauge et la barre mobile se
-rempliront toutes seules.
+**La question de fond reste ouverte, et elle est pour Malik :** une
+inscription `PENDING` non payée occupe-t-elle une place ? L'implémentation
+retenue compte les dossiers **ayant versé le minimum** — autrement dit
+non, une réservation non payée ne bloque rien. C'est un choix défendable,
+mais il n'a jamais été acté : à confirmer ou à changer.
 
 ---
 
@@ -171,6 +162,37 @@ Le site affiche ce que l'API dit — c'est voulu, c'est tout l'intérêt du
 back-office. Mais ça veut dire qu'une faute de frappe dans le panneau est
 en vitrine dans les quinze minutes (ISR, `revalider: 900`). **Le prix
 définitif est à acter avec Malik, puis à ne plus toucher.**
+
+---
+
+## Ce qui reste marqué sur le site vient maintenant des **données**
+
+Relevé sur `https://ai-devclassroom.com` le 2026-11-10 : huit
+`[À COMPLÉTER]` visibles. Six disparaissent avec cette branche — ils
+venaient du code. **Deux ne disparaîtront pas, parce qu'ils ont été
+tapés dans le panneau d'administration :**
+
+```
+#4  API + IA   description = "API + IA
+[À COMPLÉTER] — description de la session #4."
+#2  SaaS       description = null   → plus rien d'affiché (corrigé par le code)
+```
+
+Le marqueur du sprint #4 est du contenu, pas du gabarit : aucune
+modification du site ne l'enlèvera. **Il faut le corriger dans
+`/admin/sprints`.**
+
+Deux autres choses se voient au passage sur ces sessions annoncées en
+« Bientôt », et elles sont publiques :
+
+- **les sprints #3 et #4 sont à 1 FCFA.** Le site affiche « 1 FCFA » en
+  clair sur leurs cartes. Si ce sont des sprints de test, ils ne
+  devraient pas être `INACTIVE` mais `DRAFT` — `INACTIVE` veut dire
+  « annoncé, pas encore ouvert » et sort donc sur le site public, alors
+  qu'un brouillon reste caché ;
+- **le sprint #2 « SaaS » est daté du 13 novembre 2026**, soit dans
+  trois jours, et il est toujours annoncé en « Bientôt » sans
+  description ni prix définitif.
 
 ---
 
