@@ -487,15 +487,36 @@ export function ParcoursPaiement({
 
         {/* Les montants : déterminés automatiquement à l'arrivée sur
             l'étape — le minimum du dashboard pour réserver sa place, ou
-            le reste à payer. Aucune étape supplémentaire. */}
+            le reste à payer seul quand le dossier a déjà un acompte
+            confirmé. Aucune étape supplémentaire. */}
         {dossier.resteXof !== undefined ? (
-          <p className="text-body">
-            Reste à payer :{" "}
-            <strong>{dossier.resteXof.toLocaleString("fr-FR")} FCFA</strong>{" "}
-            <span className="text-fg/55">
-              (sur {dossier.totalXof.toLocaleString("fr-FR")})
-            </span>
-          </p>
+          <fieldset>
+            <legend className="font-mono text-small uppercase tracking-[0.15em] text-fg/60">
+              Montant
+            </legend>
+            <div className="mt-2 grid gap-3" role="radiogroup" aria-label="Montant à payer">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={montant === dossier.resteXof}
+                onClick={() => setMontant(dossier.resteXof ?? montantUnique)}
+                className={`rounded-card border px-4 py-3 text-left transition-colors duration-[160ms] ${
+                  montant === dossier.resteXof
+                    ? "border-accent/60 bg-surface"
+                    : "border-fg/15"
+                }`}
+              >
+                <span className="block text-body font-bold">Reste à payer</span>
+                <span className="mt-1 block font-mono text-small text-fg/60">
+                  {(dossier.resteXof ?? 0).toLocaleString("fr-FR")} FCFA
+                </span>
+              </button>
+            </div>
+            <p className="mt-2 text-small text-fg/55">
+              Solde de ton inscription (sur{" "}
+              {dossier.totalXof.toLocaleString("fr-FR")} FCFA).
+            </p>
+          </fieldset>
         ) : (
           <>
             <p className="text-body">

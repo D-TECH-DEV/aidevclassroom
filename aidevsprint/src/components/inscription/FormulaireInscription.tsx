@@ -12,6 +12,7 @@ import {
   lancePaiement,
   rangeJetonSuivi,
   rangeTrace,
+  retrouveDossiersParEmail,
   statutInscription,
   traduitPaiement,
 } from "@/lib/paiement";
@@ -355,16 +356,43 @@ export function FormulaireInscription({ edition }: { edition: Edition }) {
   };
 
   /**
-   * Retrouve le dossier de cette session parmi ceux connus de ce
-   * navigateur, et lit son reste à payer. Instantané quand le dossier
-   * est ici ; sinon on le dit, sans inventer un montant.
+   * Retrouve le dossier de cette session pour le sprint visé, et lit
+   * son reste à payer servi par le backend (total figé moins paiements
+   * confirmés). D'abord via l'e-mail saisi (`POST /enrollments/by-email`,
+   * marche depuis n'importe quel appareil, sans ressaisie), puis en
+   * repli parmi les dossiers connus de ce navigateur. Sans inventer un
+   * montant quand il est introuvable.
    */
-  async function retrouveDossier(sprintId: number, prenomSaisi: string) {
+  async function retrouveDossier(
+    sprintId: number,
+    emailSaisi: string,
+    prenomSaisi: string,
+  ) {
     setRechercheReprise(true);
     setReprise(null);
     setRepriseRatee(false);
 
     try {
+      // Serveur d'abord : l'e-mail identifie l'inscription existante et
+      // son solde (le jeton ré-émis rend ce navigateur capable de payer
+      // le reste dans le même parcours).
+      try {
+        const distant = await retrouveDossiersParEmail(emailSaisi);
+        const dossier = distant.find((d) => d.sprint?.id === sprintId);
+        if (dossier) {
+          setReprise({
+            id: dossier.id,
+            jeton: dossier.trackingToken,
+            prenom: prenomSaisi,
+            email: emailSaisi.trim().toLowerCase(),
+            reste: dossier.remainingAmountXof ?? 0,
+            total: dossier.totalAmountXof,
+          });
+          return;
+        }
+      } catch {
+        // Repli local ci-dessous (hors-ligne, quota, limitation).
+      }
       for (const local of dossiersLocaux()) {
         try {
           const suivi = await statutInscription(
@@ -473,7 +501,11 @@ export function FormulaireInscription({ edition }: { edition: Edition }) {
       // Déjà inscrit avec cet e-mail : on cherche le dossier tout de
       // suite, pour afficher son reste sans changer de page.
       if (cause instanceof ErreurApi && cause.code === "DUPLICATE_ENROLLMENT") {
-        void retrouveDossier(edition.id, valeurs.prenom.trim());
+        void retrouveDossier(
+          edition.id,
+          valeurs.email.trim(),
+          valeurs.prenom.trim(),
+        );
       }
     }
   }
@@ -882,15 +914,15 @@ export function FormulaireInscription({ edition }: { edition: Edition }) {
             </p>
           ) : repriseRatee ? (
             <p className="text-small text-fg/70">
-              Dossier introuvable sur cet appareil. Retrouve-le avec ton
-              e-mail sur la{" "}
+              Dossier introuvable pour cette adresse sur cette session.
+              Retrouve-le avec ton e-mail sur la{" "}
               <a
                 href="/paiement/reprendre"
                 className="underline decoration-fg/25 underline-offset-4"
               >
                 page « reprendre mon paiement »
-              </a>
-              , ou écris-nous sur WhatsApp au {WHATSAPP_AFFICHE}.
+              </a>{" "}
+              et paie ton reste dans le même parcours.
             </p>
           ) : null}
         </div>
