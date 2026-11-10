@@ -201,52 +201,86 @@ participant ne peut plus ni suivre son dossier ni payer.
 ### Ce que Youssouf doit faire de son côté
 
 > Tout ce qui suit lui est expliqué, mesures et commandes à l'appui, dans
-> [pour-youssouf.md](./pour-youssouf.md) — le document à lui transmettre.
+> [demandes-api.md](./demandes-api.md) — le document à lui transmettre.
+> `pour-youssouf.md` est le relevé du 2 novembre, périmé depuis.
 
 
-- [ ] **Ouvrir le CORS.** Re-mesuré le 2026-11-01 : la configuration a
-      bougé depuis le 27 octobre — `Vary: Origin`,
-      `Access-Control-Allow-Credentials`, `-Allow-Methods` et
-      `-Allow-Headers` sont désormais renvoyés. Mais
-      `Access-Control-Allow-Origin` manque toujours, et c'est le seul qui
-      compte : sans lui le navigateur jette la réponse. Testé sur cinq
-      origines (`localhost:3000`, `ai-dev-sprint.com`,
-      `www.ai-dev-sprint.com`, `aidev.you-soft.com`, une origine au
-      hasard) : aucune n'est autorisée, pas même la sienne. La forme du
-      refus — tout présent sauf `Allow-Origin`, pour toutes les origines —
-      désigne une liste blanche `enableCors({ origin: … })` qui ne
-      correspond à rien, donc `FRONTEND_URL` vide ou mal nommée en
-      production. À noter : avec `Allow-Credentials: true`, un `*` serait
-      refusé par le navigateur de toute façon. Il doit renvoyer l'origine
-      exacte.
+> Relevé du 2026-11-07 : l'essentiel est fait. Le site est en ligne sur
+> **`ai-devclassroom.com`** (le domaine a changé, `ai-dev-sprint.com`
+> n'a jamais été pris), servi depuis le serveur de Youssouf —
+> `212.47.73.163`, la même machine que l'API. Le sprint #1 existe et est
+> `ACTIVE`. Il reste deux points, plus deux questions.
+
+- [ ] **Exposer un compteur d'inscrits sur la route publique.** C'est le
+      dernier `[À DÉTERMINER]` visible du site, et il apparaît deux fois :
+      la pastille « Places » du hero et le « Nombre de places » de la
+      section Session. `GET /sprints` porte bien `capacity`, mais aucun
+      décompte : `SeatsGauge` exige les deux pour afficher quoi que ce
+      soit (`inscrits !== null && quota !== null`), donc `edition.ts`
+      laisse `inscrits` à `null`. Sans ce champ, impossible d'annoncer
+      « il reste N places » sans l'inventer. À défaut, décider côté site
+      de n'afficher que la capacité.
 - [ ] **Réparer `GET /enrollments/:id/status`.** Mesuré le 2026-11-01 :
       renvoie `500 INTERNAL_ERROR` dans tous les cas — sans jeton, avec un
       jeton invalide, sur un identifiant inexistant. La doc annonce
       `401 TRACKING_TOKEN_REQUIRED` ou `404 ENROLLMENT_NOT_FOUND` : le
       guard plante avant de décider. Le site ne consomme pas cette route
       aujourd'hui, donc rien n'est bloqué — mais c'est la route qui
-      permettrait au participant de retrouver son dossier, et elle sera
-      nécessaire le jour où on branche un lien de suivi.
-- [ ] **Créer le sprint #1 et le passer `ACTIVE`.** `GET /sprints` renvoie
-      `{ items: [], total: 0 }`. Le nom du sprint s'affiche tel quel dans
-      l'étiquette de la section Session : le nommer en conséquence.
-- [ ] Exposer un **compteur d'inscrits** sur la route publique, sinon la
-      jauge de places reste vide.
-- [ ] Ajouter **lieu / ville / format** au modèle `Sprint`, ou acter qu'ils
-      restent côté site.
-- [ ] Régler **`PAYSTACK_CALLBACK_URL`** sur notre page de retour, qui
-      existe depuis le 2026-10-28 :
-      `https://ai-dev-sprint.com/paiement/retour`. Tant qu'elle ne pointe
-      pas là, le participant paie et atterrit ailleurs — l'argent part, la
+      permettrait au participant de retrouver son dossier.
+- [ ] **Confirmer `PAYSTACK_CALLBACK_URL`.** Elle doit pointer sur
+      `https://ai-devclassroom.com/paiement/retour`. Invisible de
+      l'extérieur, donc invérifiable par nous. Tant qu'elle ne pointe pas
+      là, le participant paie et atterrit ailleurs — l'argent part, la
       confirmation non.
 - [ ] Dire s'il part **un email** à l'inscription. Rien dans la doc n'en
       parle, donc le site n'en promet aucun.
 
+Réglés depuis :
+
+- [x] **Le site est hébergé** et le domaine enregistré — `ai-devclassroom.com`,
+      vérifié le 2026-11-07. Le relais et le panneau d'administration
+      répondent tous les deux en production.
+- [x] **Le sprint #1 est `ACTIVE`** depuis le 2026-11-05 : `Portfolio`,
+      slug `portfolio`, 50 places, le 2026-12-05 de 08h30 à 17h30.
+      ⚠ **Le prix bouge côté admin et le site suit sans broncher** :
+      10 000 FCFA au relevé du 2026-11-07, **15 000 FCFA** (versement
+      minimum 5 000) à celui du 2026-11-09. Ni l'un ni l'autre n'est le
+      20 000 de l'affiche et de `CLAUDE.md`. Le site affiche ce que l'API
+      dit (`edition.ts:83`) — c'est voulu, mais ça veut dire qu'une faute
+      de frappe dans le panneau se retrouve en vitrine dans les quinze
+      minutes (ISR, `revalider: 900`). **Le prix définitif est à acter
+      avec Malik, puis à figer côté admin.**
+- [x] **Le CORS n'est plus bloquant** — contourné, pas réglé. Le relais
+      même-origine `src/app/api/[...chemin]/route.ts` fait passer les
+      appels publics par le serveur Next, où la règle ne s'applique pas.
+      Mesuré le 2026-11-07, `Access-Control-Allow-Origin` reste absent y
+      compris pour `https://ai-devclassroom.com` : un appel direct depuis
+      le navigateur échouerait toujours. Le relais tient, mais c'est un
+      contournement — le jour où quelque chose doit parler à l'API sans
+      passer par nous, il faudra la vraie liste blanche.
+- [x] **lieu / ville / format** restent côté site, dans `FAITS_LOCAUX`
+      (`edition.ts`). Acté : le modèle `Sprint` ne les porte pas.
+
 ### Reste à faire côté site
 
-- [ ] Décider ce qu'on fait du **paiement fractionné** : le modèle autorise
-      de payer en plusieurs fois à partir de `minimumPaymentXof`, le site
-      annonce et encaisse 20 000 FCFA d'un bloc. La page de retour sait
+- [x] **Plus aucun marqueur de chantier sur le site public**
+      (2026-11-09), sauf les deux compteurs de places qui attendent le
+      champ de Youssouf. Règle posée : un trou de contenu ne s'affiche
+      pas au visiteur. Soit l'élément ne se rend pas du tout (question de
+      FAQ sans réponse, bio de formateur absente, description de session
+      vide, ligne de liens jamais fournie — supprimée), soit il s'écrit
+      en clair (« À annoncer » pour la date et le prix quand aucune
+      session n'est ouverte ou que l'API est muette). Rien n'est inventé :
+      les trous restent lisibles dans le code, aux endroits qui les
+      déclarent (`QUESTIONS` dans `Faq.tsx`, `FORMATEURS`).
+      ⚠ Conséquence à connaître : **le site ne signale plus ses propres
+      trous.** La question « Dois-je venir avec mon ordinateur ? » a
+      disparu de la FAQ, et la bio de Victorien n'apparaît nulle part.
+      Elles reviendront d'elles-mêmes dès que le texte sera écrit.
+
+- [ ] Décider ce qu'on fait du **paiement fractionné** : le sprint publié
+      accepte des versements à partir de 3 000 FCFA (`minimumPaymentXof`),
+      le site encaisse le prix entier d'un bloc. La page de retour sait
       déjà afficher un solde restant, au cas où.
 - [ ] Le `trackingToken` ne vit que dans le `localStorage` du navigateur qui
       s'est inscrit. Stockage vidé, autre téléphone, navigation privée : il
@@ -360,15 +394,17 @@ que Next 16 a des ruptures d'API et qu'il faut lire
 ## À décider
 
 - [ ] Monorepo (`apps/web` + `apps/cms`) ou deux dépôts
-- [ ] **Hébergement front.** Rien n'est en place : le site ne tourne que
-      sur la machine de Malik. Mesuré le 2026-11-02, le domaine n'existe
-      même pas — `nslookup ai-dev-sprint.com` renvoie
-      `Non-existent domain`, et le RDAP Verisign répond 404 : il n'est pas
-      enregistré. Conséquences en chaîne : Youssouf n'a aucune URL à
-      ouvrir, il ne peut pas inscrire notre origine dans sa liste blanche
-      CORS, et `PAYSTACK_CALLBACK_URL` ne peut pointer nulle part. Un
-      déploiement Vercel donnerait une URL publique immédiate sans
-      attendre le domaine, ce qui débloque les trois d'un coup.
+- [x] **Hébergement front — réglé.** Le site est en ligne sur
+      **`https://ai-devclassroom.com`**, servi depuis `212.47.73.163`,
+      la même machine que `aidev.you-soft.com`. Mesuré le 2026-11-07 :
+      la page d'accueil répond `200`, la date et l'heure affichées
+      viennent bien de l'API, `/api/health` traverse le relais, et
+      `/admin` redirige en `307` vers `/admin/connexion`.
+- [ ] **Le déploiement Vercel `aidevsprint.vercel.app` est à débrancher
+      ou à reconfigurer.** Il répond `200` mais son `/api/*` renvoie
+      `NEXT_PUBLIC_API_URL n'est pas configurée` : `NEXT_PUBLIC_API_URL`
+      n'y est pas posée. Deux adresses pour un seul site, dont une
+      cassée — il faut en choisir une. Décision de Malik.
 - [ ] Hébergement back (chez Youssouf, déjà en ligne — à acter)
 - [ ] Stratégie de tests
 - [ ] Gestionnaire de paquets (npm / pnpm)

@@ -1,4 +1,4 @@
-import { A_DETERMINER, FAITS_LOCAUX, type Edition } from "@/lib/edition";
+import { FAITS_LOCAUX, type Edition } from "@/lib/edition";
 import type { ReactNode } from "react";
 
 /**
@@ -91,7 +91,7 @@ const heure = new Intl.DateTimeFormat("fr-FR", {
 
 /**
  * Sans édition, la card ne devine rien : les trois faits qui viennent de
- * l'API passent en [À DÉTERMINER] plutôt que de rejouer la dernière
+ * l'API passent en « À annoncer » plutôt que de rejouer la dernière
  * valeur connue. Seul le lieu tient sans elle — il ne vient pas de l'API,
  * voir `FAITS_LOCAUX`.
  */
@@ -111,13 +111,13 @@ export function CarteInfos({ edition }: { edition: Edition | null }) {
     {
       glyphe: GlypheDate,
       etiquette: "Date",
-      valeur: debut ? jour.format(debut) : A_DETERMINER,
+      valeur: debut ? jour.format(debut) : "À annoncer",
       aDeterminer: debut === null,
     },
     {
       glyphe: GlypheHeure,
       etiquette: "Heure",
-      valeur: debut ? `${heure.format(debut)} — début` : A_DETERMINER,
+      valeur: debut ? `${heure.format(debut)} — début` : "À annoncer",
       aDeterminer: debut === null,
     },
     {

@@ -82,7 +82,19 @@ export const FAITS_LOCAUX = {
   format: "1 journée · présentiel",
 } as const;
 
-/** Libellé affiché pour un champ non encore arrêté. */
+/**
+ * Le marqueur de chantier.
+ *
+ * Plus aucun composant ne l'importe depuis le 2026-11-09 : un trou de
+ * contenu ne s'affiche plus au visiteur, il se tait (la ligne n'est pas
+ * rendue) ou il s'écrit en clair (« À annoncer »). Deux endroits gardent
+ * encore la chaîne en dur, `SeatsGauge` et `Navbar`, le temps que
+ * Youssouf expose le compteur d'inscrits — Malik le lui a demandé.
+ *
+ * La constante reste pour la prochaine fois : un marqueur visible vaut
+ * toujours mieux qu'un faux texte crédible, tant qu'il ne survit pas
+ * jusqu'en production.
+ */
 export const A_DETERMINER = "[À DÉTERMINER]";
 
 export function versEdition(sprint: Sprint): Edition {

@@ -22,7 +22,7 @@ export function Footer() {
       >
         <p className="font-mono text-fg/80">{"{ AIdevsprint }"}</p>
 
-        <p>ai-dev-sprint.com · Yamoussoukro, Côte d&apos;Ivoire</p>
+        <p>ai-devclassroom.com · Yamoussoukro, Côte d&apos;Ivoire</p>
 
         <p>© {new Date().getFullYear()} AIdevsprint</p>
       </div>

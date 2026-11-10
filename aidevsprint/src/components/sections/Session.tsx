@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { BoutonReserver } from "@/components/inscription/BoutonReserver";
 import { EtiquetteSection } from "@/components/ui/EtiquetteSection";
-import { A_DETERMINER, FAITS_LOCAUX, type Edition } from "@/lib/edition";
+import { FAITS_LOCAUX, type Edition } from "@/lib/edition";
 import { Reveal } from "@/components/motion/Reveal";
 
 /**
@@ -19,7 +19,10 @@ import { Reveal } from "@/components/motion/Reveal";
  * fond de carte.
  *
  * Aucun fait n'est écrit en dur : tout vient de l'édition. Un champ non
- * arrêté s'affiche [À DÉTERMINER], jamais comblé.
+ * arrêté n'est jamais comblé par une valeur plausible : la barre de
+ * faits écrit « À annoncer », l'étiquette perd le nom de la session, et
+ * le compteur de places disparaît. Rien n'est inventé, rien n'affiche
+ * non plus un marqueur de chantier au visiteur.
  */
 
 const TEMPS = [
@@ -70,13 +73,13 @@ export function Session({ edition }: { edition: Edition | null }) {
         month: "long",
         year: "numeric",
       }).format(new Date(edition.dateDebut))
-    : A_DETERMINER;
+    : "À annoncer";
 
   const prix = edition
     ? edition.prixDuoFCFA != null
       ? `Solo ${edition.prixFCFA.toLocaleString("fr-FR")} · Duo ${edition.prixDuoFCFA.toLocaleString("fr-FR")} FCFA`
       : `${edition.prixFCFA.toLocaleString("fr-FR")} FCFA`
-    : A_DETERMINER;
+    : "À annoncer";
 
   return (
     <section
@@ -100,7 +103,8 @@ export function Session({ edition }: { edition: Edition | null }) {
         <div className="grid gap-[clamp(2.5rem,6svh,4rem)] lg:grid-cols-2 lg:items-center lg:gap-[clamp(2rem,5vw,5rem)]">
           <div>
             <EtiquetteSection>
-              {edition?.nom ?? A_DETERMINER} · {FAITS_LOCAUX.format}
+              {edition?.nom ? `${edition.nom} · ` : ""}
+              {FAITS_LOCAUX.format}
             </EtiquetteSection>
 
             <h2 className="mt-[clamp(1rem,3svh,2rem)] max-w-[14ch] text-h1 font-bold leading-[1.02] tracking-tighter">
@@ -169,18 +173,15 @@ export function Session({ edition }: { edition: Edition | null }) {
 
           <div className="flex flex-col gap-[clamp(1rem,2.5svh,1.5rem)] lg:flex-row lg:items-center lg:justify-between">
             <p className="text-body text-fg/70">
-              Places limitées ·{" "}
-              <span
-                className={
-                  edition?.quota != null
-                    ? "font-bold text-fg"
-                    : "font-mono text-accent/70"
-                }
-              >
-                {edition?.quota != null
-                  ? `${edition.quota} places`
-                  : A_DETERMINER}
-              </span>
+              Places limitées
+              {edition?.quota != null && (
+                <>
+                  {" · "}
+                  <span className="font-bold text-fg">
+                    {edition.quota} places
+                  </span>
+                </>
+              )}
             </p>
 
             <div className="flex flex-col gap-[clamp(0.75rem,2svh,1rem)] sm:flex-row sm:items-center">

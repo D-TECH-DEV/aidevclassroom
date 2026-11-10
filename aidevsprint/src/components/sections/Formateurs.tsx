@@ -45,22 +45,45 @@ import { Reveal } from "@/components/motion/Reveal";
  *    voir `BadgeSuspendu` et `DELAI_BADGE`.
  *
  * Ce que transmettent Youssouf et Malik vient du brief, mot pour mot.
- * Celui de Victorien et les liens ne sont pas fournis : [À COMPLÉTER].
+ * Celui de Victorien n'a jamais été fourni, et aucun des trois n'a donné
+ * ses liens. Rien n'est inventé pour autant : **ce qui manque ne se rend
+ * pas.** La ligne « ce qu'il transmet » disparaît quand `transmet` vaut
+ * `null`, et la ligne de liens n'existe plus du tout — elle n'annonçait
+ * que son propre vide. Les trous restent lisibles dans `FORMATEURS`.
  */
-
-const A_COMPLETER = "[À COMPLÉTER]";
 
 /** Écart entre deux montages de canvas WebGL. Voir `BadgeSuspendu`. */
 const DELAI_BADGE = 260;
 
-/** Longueur de cordon et balancement propres à chaque badge. */
-/* `size` est une fraction du conteneur : au-delà de ~0,7 le badge
-   dépasse son canvas et se fait couper, puisque rien ne peut être
-   dessiné en dehors. On agrandit le canvas, pas la fraction. */
+/**
+ * Longueur de cordon, balancement et **phase** propres à chaque badge.
+ *
+ * `size` est une fraction du conteneur : au-delà de ~0,7 le badge dépasse
+ * son canvas et se fait couper, puisque rien ne peut être dessiné en
+ * dehors. On agrandit le canvas, pas la fraction.
+ *
+ * ── Pourquoi `phase`, `gravity` et `damping` diffèrent ───────────────
+ * Les trois badges se balançaient à l'unisson. `DELAI_BADGE` n'y pouvait
+ * rien : il écarte les montages de 260 ms, alors que le cycle dominant du
+ * vent dure 11,86 s (`sin(time * 0.53)`, voir `Lanyard.tsx`). 260 ms,
+ * c'est 2 % du cycle — 8° d'écart, invisible. Trois pendules synchronisés
+ * ne se lisent pas comme trois objets suspendus, ils se lisent comme un
+ * bug.
+ *
+ * Deux réglages, donc :
+ *
+ * 1. `phase` décale l'horloge du vent d'un tiers de cycle à chaque fois
+ *    (0 / 3,95 / 7,91 s, soit 120°). Aucun des trois ne peut suivre
+ *    l'autre.
+ * 2. `gravity` et `damping` varient de ±5 %. Sans ça, les trois partagent
+ *    la même fréquence propre : ils se resynchronisent tout seuls après
+ *    chaque interaction, puisqu'un badge qu'on attrape puis qu'on lâche
+ *    retombe dans le rythme commun.
+ */
 const SUSPENSIONS = [
-  { strapLength: 0.26, size: 0.62, breeze: 0.35 },
-  { strapLength: 0.4, size: 0.68, breeze: 0.6 },
-  { strapLength: 0.32, size: 0.65, breeze: 0.45 },
+  { strapLength: 0.26, size: 0.62, breeze: 0.35, phase: 0, gravity: 1, damping: 0.5 },
+  { strapLength: 0.4, size: 0.68, breeze: 0.6, phase: 3.95, gravity: 1.05, damping: 0.475 },
+  { strapLength: 0.32, size: 0.65, breeze: 0.45, phase: 7.91, gravity: 0.95, damping: 0.525 },
 ];
 
 function Profil({ formateur, index }: { formateur: Formateur; index: number }) {
@@ -96,6 +119,9 @@ function Profil({ formateur, index }: { formateur: Formateur; index: number }) {
           size={s.size}
           strapLength={s.strapLength}
           breeze={s.breeze}
+          phase={s.phase}
+          gravity={s.gravity}
+          damping={s.damping}
           delaiMs={index * DELAI_BADGE}
         />
       </div>
@@ -141,18 +167,9 @@ function Profil({ formateur, index }: { formateur: Formateur; index: number }) {
           </div>
         </div>
 
-        <p
-          className={`text-body ${
-            formateur.transmet ? "text-fg/70" : "font-mono text-accent/70"
-          }`}
-        >
-          {formateur.transmet ??
-            `${A_COMPLETER} — ce qu'il transmet ce jour-là.`}
-        </p>
-
-        <p className="font-mono text-small text-accent/70">
-          {A_COMPLETER} — GitHub, LinkedIn, portfolio
-        </p>
+        {formateur.transmet && (
+          <p className="text-body text-fg/70">{formateur.transmet}</p>
+        )}
       </div>
     </Reveal>
   );

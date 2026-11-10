@@ -3,8 +3,9 @@
  *
  * Noms, rôles et photos viennent de l'affiche — confirmés.
  * Ce que chacun transmet et ses liens restent à fournir : ils sont marqués
- * `null` et s'affichent comme [À COMPLÉTER], jamais remplacés par un texte
- * crédible inventé.
+ * `null` et **ne s'affichent pas du tout**, jamais remplacés par un texte
+ * crédible inventé. La ligne manquante réapparaît d'elle-même le jour où
+ * le texte arrive — voir `Formateurs.tsx`.
  */
 
 export type Formateur = {

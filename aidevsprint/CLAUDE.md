@@ -19,7 +19,7 @@ portfolio en ligne.
 | Prix | 20 000 FCFA |
 | Promesse | « Repars avec ton portfolio en ligne » |
 | Accroche | « Le vibe coding, bien fait » |
-| Réservation | ai-dev-sprint.com · WhatsApp 07 04 92 10 80 |
+| Réservation | ai-devclassroom.com · WhatsApp 07 04 92 10 80 |
 
 **Le programme, en 4 temps :**
 
@@ -81,7 +81,8 @@ La doc longue vit dans `docs/`. Ce fichier ne fait que pointer dessus.
 
 - [docs/stack.md](docs/stack.md) — stack technique, commandes, conventions de code
 - [docs/admin.md](docs/admin.md) — le panneau d'administration : écrans, sécurité, pièges
-- [docs/pour-youssouf.md](docs/pour-youssouf.md) — ce qui bloque côté API, à lui transmettre
+- [docs/demandes-api.md](docs/demandes-api.md) — ce que le site attend de l'API, à transmettre à Youssouf
+- [docs/pour-youssouf.md](docs/pour-youssouf.md) — le relevé du 2 novembre, périmé, gardé pour l'historique
 - [docs/design.md](docs/design.md) — direction artistique, tokens, composants
 - [.claude/skills/README.md](.claude/skills/README.md) — skills installés et leurs limites
 
