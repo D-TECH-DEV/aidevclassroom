@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Prisma, SprintStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { countEnrolled } from './enrolled-count.util';
 
 export const SPRINT_TRANSITIONS: Record<SprintStatus, SprintStatus[]> = {
   DRAFT: ['ACTIVE', 'INACTIVE'],
@@ -110,14 +111,22 @@ export class SprintsService {
    * terminées (`COMPLETED`) : un brouillon n'est pas une annonce, et
    * une session terminée n'est pas à venir.
    */
-  listPublic(page = 1, limit = 20) {
+  async listPublic(page = 1, limit = 20) {
     const take = Math.min(Math.max(limit, 1), 100);
     const skip = (Math.max(page, 1) - 1) * take;
-    return this.listWhere(
+    const base = await this.listWhere(
       { status: { in: [SprintStatus.ACTIVE, SprintStatus.INACTIVE] } },
       skip,
       take,
     );
+    const counts = await this.countMap(base.items);
+    return {
+      ...base,
+      items: base.items.map((sprint) => ({
+        ...sprint,
+        ...counts.get(sprint.id),
+      })),
+    };
   }
 
   listAll(page = 1, limit = 20, status?: SprintStatus) {
@@ -151,7 +160,90 @@ export class SprintsService {
         message: 'Sprint introuvable.',
       });
     }
-    return sprint;
+    const counts = await this.countMap([sprint]);
+    return { ...sprint, ...counts.get(sprint.id) };
+  }
+
+  /**
+   * Compteur public d'inscrits : dossiers non annules dont le total des
+   * versements SUCCESS atteint le minimum du sprint (minimum duo pour un
+   * dossier DUO quand il est defini). Visible pour les sessions `ACTIVE`
+   * et `INACTIVE` (le catalogue public), 404 sinon.
+   */
+  async countEnrolled(id: number) {
+    const sprint = await this.prisma.sprint.findUnique({ where: { id } });
+    if (
+      !sprint ||
+      (sprint.status !== 'ACTIVE' && sprint.status !== 'INACTIVE')
+    ) {
+      throw new NotFoundException({
+        code: 'SPRINT_NOT_FOUND',
+        message: 'Sprint introuvable.',
+      });
+    }
+    const counts = await this.countMap([sprint]);
+    return {
+      sprintId: sprint.id,
+      capacity: sprint.capacity,
+      ...counts.get(sprint.id),
+    };
+  }
+
+  /** Compte les inscrits d'un lot de sprints en une seule requete. */
+  private async countMap(
+    sprints: {
+      id: number;
+      minimumPaymentXof: number;
+      duoMinimumPaymentXof?: number | null;
+    }[],
+  ) {
+    const counts = new Map<
+      number,
+      { enrolledCount: number; enrolledSeats: number }
+    >();
+    for (const sprint of sprints) {
+      counts.set(sprint.id, { enrolledCount: 0, enrolledSeats: 0 });
+    }
+    if (sprints.length === 0) return counts;
+    const thresholds = new Map(
+      sprints.map((s) => [
+        s.id,
+        {
+          minimum: s.minimumPaymentXof,
+          duoMinimum: s.duoMinimumPaymentXof ?? null,
+        },
+      ]),
+    );
+    const rows = await this.prisma.enrollment.findMany({
+      where: {
+        sprintId: { in: sprints.map((s) => s.id) },
+        status: { not: 'CANCELLED' },
+      },
+      select: {
+        sprintId: true,
+        plan: true,
+        status: true,
+        payments: {
+          where: { status: 'SUCCESS' },
+          select: { status: true, amountXof: true },
+        },
+      },
+    });
+    const grouped = new Map<number, typeof rows>();
+    for (const row of rows) {
+      const list = grouped.get(row.sprintId) ?? [];
+      list.push(row);
+      grouped.set(row.sprintId, list);
+    }
+    for (const [sprintId, list] of grouped) {
+      const threshold = thresholds.get(sprintId);
+      if (!threshold) continue;
+      counts.set(
+        sprintId,
+        countEnrolled(list, threshold.minimum, threshold.duoMinimum),
+      );
+    }
+    return counts;
   }
 
   async detail(id: number) {

@@ -16,14 +16,18 @@ type Props = {
 export function SeatsGauge({ inscrits, quota }: Props) {
   const barre = useRef<HTMLDivElement>(null);
 
-  const connu = inscrits !== null && quota !== null && quota > 0;
+  // Le quota vient du sprint ouvert (`capacity`) : il est connu dès que
+  // l'admin a défini un nombre de places, même si le compteur d'inscrits
+  // n'est pas encore arrivé (ancienne API, cache). La jauge se cale donc
+  // sur le quota seul plutôt que d'afficher [À DÉTERMINER] pour tout.
+  const quotaConnu = quota !== null && quota > 0;
+  const inscritsConnus = inscrits !== null;
+  const connu = quotaConnu && inscritsConnus;
   const pourcentage = connu ? Math.min(100, (inscrits / quota) * 100) : 0;
   const complet = connu && inscrits >= quota;
 
   useGSAP(
     () => {
-      if (!connu) return;
-
       const mm = gsap.matchMedia();
       mm.add("(prefers-reduced-motion: no-preference)", () => {
         gsap.fromTo(
@@ -45,7 +49,7 @@ export function SeatsGauge({ inscrits, quota }: Props) {
       });
       return () => mm.revert();
     },
-    { dependencies: [pourcentage, connu] },
+    { dependencies: [pourcentage] },
   );
 
   return (
@@ -55,7 +59,7 @@ export function SeatsGauge({ inscrits, quota }: Props) {
         role="progressbar"
         aria-valuenow={connu ? inscrits : undefined}
         aria-valuemin={0}
-        aria-valuemax={connu ? quota : undefined}
+        aria-valuemax={quotaConnu ? quota : undefined}
         aria-label="Places réservées"
       >
         <div
@@ -69,10 +73,10 @@ export function SeatsGauge({ inscrits, quota }: Props) {
       </div>
 
       <p className="font-mono text-small text-fg/70">
-        {connu ? (
+        {quotaConnu ? (
           <>
             <span className="text-fg">
-              {inscrits} / {quota}
+              {inscritsConnus ? inscrits : "[À DÉTERMINER]"} / {quota}
             </span>{" "}
             places réservées
             {complet && <span className="text-accent"> · complet</span>}
