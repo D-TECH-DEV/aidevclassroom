@@ -17,6 +17,8 @@ ENV NODE_ENV=development
 COPY package*.json ./
 RUN npm install
 COPY . .
+ARG DATABASE_URL="postgresql://build:build@localhost:5432/build?schema=public"
+RUN npx prisma generate
 EXPOSE 3000
 CMD ["npm", "run", "start:dev"]
 

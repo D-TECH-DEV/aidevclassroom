@@ -18,7 +18,7 @@ import { RetourPaiement } from "@/components/paiement/RetourPaiement";
  */
 
 export const metadata: Metadata = {
-  title: "Paiement — AIdevsprint #1",
+  title: "Paiement — AIDevClassroom #1",
   // Une page de transaction n'a rien à faire dans un index de recherche,
   // et son adresse porte une référence de paiement.
   robots: { index: false, follow: false },

@@ -1,6 +1,6 @@
 # PRD 02 - Sprints et catalogue
 
-**Modules couverts :** `aidev_api/src/sprints` | `aidevsprint/src/lib/edition.ts`, `aidevsprint/src/app/admin/(panneau)/sprints`
+**Modules couverts :** `aidev_api/src/sprints` (`sprints.controller.ts`, `sprints.service.ts`, `enrolled-count.util.ts`) | `aidevsprint/src/lib/edition.ts`, `aidevsprint/src/components/hero/SeatsGauge.tsx`, `aidevsprint/src/components/layout/Navbar.tsx`, `aidevsprint/src/app/admin/(panneau)/sprints`
 
 ---
 
@@ -68,15 +68,23 @@ stateDiagram-v2
 - **RG-SPR-05 (Transitions autorisées)** : `PATCH /sprints/:id/status` valide la transition selon `SPRINT_TRANSITIONS` (`DRAFT -> ACTIVE, INACTIVE` ; `ACTIVE -> INACTIVE, COMPLETED` ; `INACTIVE -> ACTIVE, DRAFT` ; `COMPLETED -> []`), sinon `400 INVALID_STATUS_TRANSITION`. Un sprint `COMPLETED` est définitif.
 - **RG-SPR-06 (Protection contre la suppression)** : `DELETE /sprints/:id` échoue avec `409 HAS_ENROLLMENTS` dès qu'au moins une inscription est rattachée au sprint.
 
-### 4.3 Exposition publique (`GET /sprints` vs `GET /sprints/:id`)
+### 4.3 Exposition publique (`GET /sprints`, `GET /sprints/:id`, `GET /sprints/:id/enrolled-count`)
 
-- **RG-SPR-07 (Catalogue public `listPublic`)** : `GET /sprints` retourne les sprints `ACTIVE` (inscriptions ouvertes) et `INACTIVE` (utilisés par le frontend pour afficher les sessions à venir / « Bientôt »), triés par `createdAt desc`, à l'exclusion de `DRAFT` et `COMPLETED`.
-- **RG-SPR-08 (Détail public)** : `GET /sprints/:id` ne retourne que les sprints `ACTIVE` (`404 SPRINT_NOT_FOUND` pour tout autre statut afin de ne pas divulguer de brouillons).
+- **RG-SPR-07 (Catalogue public `listPublic`)** : `GET /sprints` retourne les sprints `ACTIVE` (inscriptions ouvertes) et `INACTIVE` (utilisés par le frontend pour afficher les sessions à venir / « Bientôt »), triés par `createdAt desc`, à l'exclusion de `DRAFT` et `COMPLETED`. Chaque élément retourné inclut les compteurs publics `enrolledCount` et `enrolledSeats`.
+- **RG-SPR-08 (Détail public)** : `GET /sprints/:id` ne retourne que les sprints `ACTIVE` (`404 SPRINT_NOT_FOUND` pour tout autre statut afin de ne pas divulguer de brouillons), enrichis avec `enrolledCount` et `enrolledSeats`.
+- **RG-SPR-09 (Compteur public d'inscrits `enrolledCount` / `enrolledSeats` et route dédiée)** :
+  - Calcul dans `aidev_api/src/sprints/enrolled-count.util.ts` (`thresholdForEnrollment`, `isEnrolled`, `countEnrolled`) : un dossier non annulé (`status != 'CANCELLED'`) compte comme inscrit dès que la somme de ses paiements `SUCCESS` est supérieure ou égale au seuil du sprint (`duoMinimumPaymentXof` pour un dossier `DUO` lorsque défini, sinon `minimumPaymentXof`).
+  - `enrolledCount` compte le nombre de dossiers qualifiés ; `enrolledSeats` compte les personnes inscrites (un dossier `DUO` qualifié vaut 2 places, aligné sur `capacity`).
+  - `GET /sprints/:id/enrolled-count` expose uniquement `{ sprintId, enrolledCount, enrolledSeats, capacity }` pour les sprints du catalogue public (`ACTIVE` et `INACTIVE`), et renvoie `404 SPRINT_NOT_FOUND` pour un sprint inconnu, `DRAFT` ou `COMPLETED`.
 
-### 4.4 Adaptation côté Frontend (`edition.ts`)
+### 4.4 Adaptation côté Frontend (`edition.ts`, `SeatsGauge.tsx`, `Navbar.tsx`)
 
-- Le frontend convertit les sprints API via `depuisApi()` / `versEdition()` (`src/lib/edition.ts`).
-- Les sessions `ACTIVE` alimentent la modale d'inscription ; les sessions `INACTIVE` restent visibles en consultation publique selon la logique d'affichage éditoriale.
+- Le frontend convertit les sprints API via `versEdition()` (`src/lib/edition.ts`) en mappant `inscrits: sprint.enrolledSeats ?? sprint.enrolledCount ?? null`.
+- Dans [`SeatsGauge.tsx`](file:///c:/projets/les_ultra_dev/aidevclassroom/aidevsprint/src/components/hero/SeatsGauge.tsx) et [`Navbar.tsx`](file:///c:/projets/les_ultra_dev/aidevclassroom/aidevsprint/src/components/layout/Navbar.tsx), `quotaConnu` (`quota !== null && quota > 0`) et `inscritsConnus` (`inscrits !== null`) sont évalués séparément :
+  - si les deux sont connus : la jauge affiche `{inscrits} / {quota} places réservées` (et `· complet` si `inscrits >= quota`) et le bandeau mobile affiche `{placesRestantes} places restantes` ;
+  - si seul le quota est connu (API sans compteur ou réponse en cache antérieure) : la jauge affiche `[À DÉTERMINER] / {quota} places réservées` et le bandeau mobile `[À DÉTERMINER] places restantes · {quota} places` ;
+  - si le quota n'est pas défini (`null` ou `<= 0`) : affichage `[À DÉTERMINER]`.
+- Les sessions `ACTIVE` alimentent le Hero, la section Session et la modale d'inscription ; les sessions `INACTIVE` restent visibles en consultation publique (« Bientôt ») dans la section Parcours.
 - Dans `/admin/sprints/nouveau`, le slug est généré automatiquement à la saisie du nom via `slugifie()` tant que l'admin ne l'a pas édité manuellement.
 
 ---
@@ -87,8 +95,9 @@ stateDiagram-v2
 
 | Méthode | Route | Auth | Description |
 |---|---|---|---|
-| `GET` | `/sprints` | Public | Catalogue paginé (`page`, `limit`) des sprints `ACTIVE` et `INACTIVE` |
-| `GET` | `/sprints/:id` | Public | Fiche d'un sprint `ACTIVE` uniquement |
+| `GET` | `/sprints` | Public | Catalogue paginé (`page`, `limit`) des sprints `ACTIVE` et `INACTIVE`, chacun enrichi avec `enrolledCount` et `enrolledSeats` |
+| `GET` | `/sprints/:id/enrolled-count` | Public | Compteur public `{ sprintId, enrolledCount, enrolledSeats, capacity }` (sprint `ACTIVE` ou `INACTIVE`) |
+| `GET` | `/sprints/:id` | Public | Fiche d'un sprint `ACTIVE` uniquement, enrichie avec `enrolledCount` et `enrolledSeats` |
 | `GET` | `/admin/sprints` | JWT `ADMIN` | Liste paginée avec filtre optionnel `status` |
 | `GET` | `/admin/sprints/:id` | JWT `ADMIN` | Fiche complète tous statuts |
 | `POST` | `/sprints` | JWT `ADMIN` | Crée un sprint (`status` optionnel, défaut `DRAFT`) |
@@ -109,7 +118,7 @@ stateDiagram-v2
 
 ## 6. Cas limites, Sécurité & Erreurs
 
-- **Dérive doc vs code** : `aidev_api/docs/frontend/endpoints.md` indique encore que `GET /sprints` ne renvoie que `ACTIVE`, alors que l'implémentation réelle (`SprintsService.listPublic`) renvoie `ACTIVE` et `INACTIVE`.
+- **Confidentialité et règle de qualification du compteur public** : l'API publique n'expose que des agrégats anonymes (`enrolledCount`, `enrolledSeats`, `capacity`) sans données nominatives ni détail des dossiers ; un dossier non annulé n'incrémente les compteurs qu'une fois le cumul de ses paiements `SUCCESS` supérieur ou égal au seuil minimum du forfait (`duoMinimumPaymentXof` pour un `DUO` si défini, sinon `minimumPaymentXof`).
 - **Codes d'erreur** : `409 SLUG_EXISTS`, `409 HAS_ENROLLMENTS`, `400 MINIMUM_EXCEEDS_PRICE`, `400 DUO_MINIMUM_WITHOUT_PRICE`, `400 DUO_MINIMUM_EXCEEDS_PRICE`, `400 INVALID_DATES`, `400 INVALID_STATUS_TRANSITION`, `404 SPRINT_NOT_FOUND`.
 - **Suppression côté API** : `DELETE /sprints/:id` refuse la suppression avec `409 HAS_ENROLLMENTS` tant qu'au moins une inscription existe pour ce sprint.
 
@@ -117,6 +126,6 @@ stateDiagram-v2
 
 ## 7. Évolutions prévues (To-Be)
 
-1. **Compteur public de places réservées** : exposer un compteur agrégé anonyme (`occupiedSeats` ou `remainingSeats`) sur `GET /api/v1/sprints` et `GET /api/v1/sprints/:id` afin de remplacer `inscrits: null` dans [`edition.ts`](file:///c:/projets/les_ultra_dev/aidevclassroom/aidevsprint/src/lib/edition.ts) et activer la jauge réelle dans [`SeatsGauge.tsx`](file:///c:/projets/les_ultra_dev/aidevclassroom/aidevsprint/src/components/hero/SeatsGauge.tsx).
-2. **Métadonnées logistiques en base** : déplacer les attributs aujourd'hui codés en dur dans `FAITS_LOCAUX` (`ville`, `lieu`, `format`, `horaires`) vers des champs dédiés du modèle `Sprint`.
-3. **Filtrage et tri multi-critères** : ajouter la recherche textuelle et le tri par date de session sur `/admin/sprints`.
+1. **Métadonnées logistiques en base** : déplacer les attributs aujourd'hui codés en dur dans `FAITS_LOCAUX` (`ville`, `lieu`, `format`, `horaires`) vers des champs dédiés du modèle `Sprint`.
+2. **Filtrage et tri multi-critères** : ajouter la recherche textuelle et le tri par date de session sur `/admin/sprints`.
+3. **Rafraîchissement client périodique du compteur** : consommer `GET /sprints/:id/enrolled-count` côté client pour actualiser la jauge de places sans attendre l'expiration du cache ISR (`revalider: 900`) de `GET /sprints`.

@@ -18,12 +18,12 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AIdevsprint #1 — Repars avec ton portfolio en ligne",
+  title: "AIDevClassroom #1 — Repars avec ton portfolio en ligne",
   description:
     "Formation d'une journée à Yamoussoukro : guider l'IA avec de vraies " +
     "compétences de dev. Le vibe coding, bien fait.",
   openGraph: {
-    title: "AIdevsprint #1 — Repars avec ton portfolio en ligne",
+    title: "AIDevClassroom #1 — Repars avec ton portfolio en ligne",
     description: "Le vibe coding, bien fait. Formation d'une journée à Yamoussoukro.",
     locale: "fr_CI",
     type: "website",

@@ -71,9 +71,9 @@ export function Navbar({
             <a
               href="#top"
               className="text-h3 font-bold tracking-tight text-fg"
-              aria-label="AIdevsprint, retour en haut"
+              aria-label="AIDevClassroom, retour en haut"
             >
-              <span className="text-accent">AI</span>devsprint
+              <span className="text-accent">AI</span>DevClassroom
             </a>
 
             {/* La capsule du centre : sombre, floutée, arrondie. */}

@@ -91,7 +91,7 @@ export function Probleme() {
             />
 
             <h3 className="text-h3 font-bold tracking-tight text-accent">
-              La méthode AIdevsprint
+              La méthode AIDevClassroom
             </h3>
 
             <ul className="mt-[clamp(1.5rem,4svh,2.5rem)] flex flex-col gap-[clamp(0.875rem,2svh,1.25rem)]">

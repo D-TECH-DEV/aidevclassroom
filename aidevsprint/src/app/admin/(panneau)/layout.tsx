@@ -43,7 +43,7 @@ export default function PanneauLayout({
               href="/admin"
               className="font-mono text-small uppercase tracking-[0.25em] text-accent"
             >
-              AIdevsprint
+              AIDevClassroom
             </Link>
 
             <nav className="flex flex-wrap items-center gap-[clamp(0.75rem,2vw,1.5rem)]">

@@ -20,11 +20,11 @@ export function Footer() {
                    text-center text-small text-fg/50
                    lg:flex-row lg:justify-between lg:text-left"
       >
-        <p className="font-mono text-fg/80">{"{ AIdevsprint }"}</p>
+        <p className="font-mono text-fg/80">{"{ AIDevClassroom }"}</p>
 
-        <p>ai-dev-sprint.com · Yamoussoukro, Côte d&apos;Ivoire</p>
+        <p>aidevclassroom.com · Yamoussoukro, Côte d&apos;Ivoire</p>
 
-        <p>© {new Date().getFullYear()} AIdevsprint</p>
+        <p>© {new Date().getFullYear()} AIDevClassroom</p>
       </div>
     </footer>
   );

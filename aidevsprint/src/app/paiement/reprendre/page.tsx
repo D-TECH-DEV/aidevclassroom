@@ -15,7 +15,7 @@ import { ReprendrePaiement } from "@/components/paiement/ReprendrePaiement";
  */
 
 export const metadata: Metadata = {
-  title: "Reprendre mon paiement — AIdevsprint #1",
+  title: "Reprendre mon paiement — AIDevClassroom #1",
   robots: { index: false, follow: false },
 };
 

@@ -17,7 +17,7 @@ import type { Metadata } from "next";
  */
 
 export const metadata: Metadata = {
-  title: "Administration — AIdevsprint",
+  title: "Administration — AIDevClassroom",
   // Un back-office n'a rien à faire dans un index de recherche.
   robots: { index: false, follow: false, nocache: true },
 };

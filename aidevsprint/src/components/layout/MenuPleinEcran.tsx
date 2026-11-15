@@ -79,7 +79,7 @@ export function MenuPleinEcran({ ancres }: { ancres: readonly Ancre[] }) {
           <div className="shell flex items-center justify-between
                           pb-4 pt-[calc(1rem+env(safe-area-inset-top,0rem))]">
             <p className="text-h3 font-bold tracking-tight">
-              <span className="text-accent">AI</span>devsprint
+              <span className="text-accent">AI</span>DevClassroom
             </p>
             <button
               type="button"
