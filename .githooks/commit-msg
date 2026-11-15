@@ -1,0 +1,39 @@
+#!/bin/sh
+# Hook commit-msg : applique les regles Git de AGENTS.md pour tous les agents.
+# 1) Supprime toute signature de co-auteur ou d'outil/IA.
+# 2) Refuse les emojis (caracteres UTF-8 sur 4 octets).
+# 3) Verifie le format "type(portee): description" et la longueur.
+
+export LC_ALL=C
+FICHIER="$1"
+TMP="$(mktemp)"
+
+grep -v -i -E '^([^a-z0-9]*generated (with|by)|co-authored-by:|signed-off-by:.*(claude|anthropic|openai|chatgpt|gemini|copilot|cursor|codex))' "$FICHIER" > "$TMP"
+cat "$TMP" > "$FICHIER"
+rm -f "$TMP"
+
+if grep -q "$(printf '\360')" "$FICHIER"; then
+  echo "ERREUR : emoji interdit dans le message de commit (voir AGENTS.md)." >&2
+  exit 1
+fi
+
+PREMIERE_LIGNE="$(grep -v '^#' "$FICHIER" | sed -n '/./{p;q;}')"
+
+# Laisse passer les merges, reverts, fixup et squash
+case "$PREMIERE_LIGNE" in
+  Merge*|Revert*|fixup!*|squash!*) exit 0 ;;
+esac
+
+if ! printf '%s' "$PREMIERE_LIGNE" | grep -E -q '^(feat|fix|refactor|docs|test|chore|perf)(\([a-z0-9_./-]+\))?: .{3,}$'; then
+  echo "ERREUR : message de commit refuse." >&2
+  echo "  Format attendu : type(portee): description en francais" >&2
+  echo "  Types : feat, fix, refactor, docs, test, chore, perf" >&2
+  echo "  Exemple : fix(stock): corrige le calcul du solde lors d'une vente annulee" >&2
+  exit 1
+fi
+
+if [ "${#PREMIERE_LIGNE}" -gt 72 ]; then
+  echo "ERREUR : premiere ligne trop longue (${#PREMIERE_LIGNE} > 72 caracteres)." >&2
+  exit 1
+fi
+exit 0
