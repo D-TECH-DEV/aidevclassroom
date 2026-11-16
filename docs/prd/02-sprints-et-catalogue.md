@@ -1,6 +1,6 @@
 # PRD 02 - Sprints et catalogue
 
-**Modules couverts :** `aidev_api/src/sprints` (`sprints.controller.ts`, `sprints.service.ts`, `enrolled-count.util.ts`) | `aidevsprint/src/lib/edition.ts`, `aidevsprint/src/components/hero/SeatsGauge.tsx`, `aidevsprint/src/components/layout/Navbar.tsx`, `aidevsprint/src/app/admin/(panneau)/sprints`
+**Modules couverts :** `aidev_api/src/sprints` (`sprints.controller.ts`, `sprints.service.ts`, `enrolled-count.util.ts`) | `aidev_front/src/lib/edition.ts`, `aidev_front/src/lib/usePlacesSprint.ts`, `aidev_front/src/components/hero/SeatsGauge.tsx`, `aidev_front/src/components/layout/Navbar.tsx`, `aidev_front/src/app/admin/(panneau)/sprints`
 
 ---
 
@@ -35,6 +35,11 @@ Gérer le cycle de vie complet des sessions de formation (« Sprints ») : créa
 | `duo_minimum_payment_xof` | `INTEGER` (nullable) | Minimum de versement Duo (`>= 1` et `<= duo_price_xof`) |
 | `start_at` / `end_at` | `TIMESTAMP(3)` | Dates de début et de fin (`end_at > start_at`) |
 | `capacity` | `INTEGER` (nullable) | Capacité maximale en places (`null` = capacité illimitée) |
+| `city` | `VARCHAR(100)` (nullable) | Ville d'accueil de la session (ajoutée par `0004_dynamic_sprints_and_content`) |
+| `location` | `VARCHAR(255)` (nullable) | Lieu / salle exacte de la session (`0004_dynamic_sprints_and_content`) |
+| `format` | `VARCHAR(120)` (nullable) | Format affiché (ex. « 1 journée · présentiel », `0004_dynamic_sprints_and_content`) |
+| `level` | `VARCHAR(120)` (nullable) | Niveau requis affiché (ex. « bases en dev », `0004_dynamic_sprints_and_content`) |
+| `modules` | `JSONB` (nullable) | Liste des modules du programme affichés sur la vitrine (`0004_dynamic_sprints_and_content`) |
 | `status` | `SprintStatus` | Enum : `'DRAFT' | 'ACTIVE' | 'INACTIVE' | 'COMPLETED'` (défaut `'DRAFT'`) |
 | `created_at` / `updated_at` | `TIMESTAMP(3)` | Horodatage |
 
@@ -77,10 +82,10 @@ stateDiagram-v2
   - `enrolledCount` compte le nombre de dossiers qualifiés ; `enrolledSeats` compte les personnes inscrites (un dossier `DUO` qualifié vaut 2 places, aligné sur `capacity`).
   - `GET /sprints/:id/enrolled-count` expose uniquement `{ sprintId, enrolledCount, enrolledSeats, capacity }` pour les sprints du catalogue public (`ACTIVE` et `INACTIVE`), et renvoie `404 SPRINT_NOT_FOUND` pour un sprint inconnu, `DRAFT` ou `COMPLETED`.
 
-### 4.4 Adaptation côté Frontend (`edition.ts`, `SeatsGauge.tsx`, `Navbar.tsx`)
+### 4.4 Adaptation côté Frontend (`edition.ts`, `usePlacesSprint.ts`, `SeatsGauge.tsx`, `Navbar.tsx`)
 
-- Le frontend convertit les sprints API via `versEdition()` (`src/lib/edition.ts`) en mappant `inscrits: sprint.enrolledSeats ?? sprint.enrolledCount ?? null`.
-- Dans [`SeatsGauge.tsx`](file:///c:/projets/les_ultra_dev/aidevclassroom/aidevsprint/src/components/hero/SeatsGauge.tsx) et [`Navbar.tsx`](file:///c:/projets/les_ultra_dev/aidevclassroom/aidevsprint/src/components/layout/Navbar.tsx), `quotaConnu` (`quota !== null && quota > 0`) et `inscritsConnus` (`inscrits !== null`) sont évalués séparément :
+- Le frontend convertit les sprints API via `versEdition()` (`src/lib/edition.ts`) en mappant `inscrits: sprint.enrolledSeats ?? sprint.enrolledCount ?? null` ainsi que les champs logistiques `ville`, `lieu`, `format`, `niveau` et `modules` (avec replis `FAITS_LOCAUX` et `MODULES_DEFAUT` si non renseignés).
+- Dans [`SeatsGauge.tsx`](file:///c:/projets/les_ultra_dev/aidevclassroom/aidev_front/src/components/hero/SeatsGauge.tsx) et [`Navbar.tsx`](file:///c:/projets/les_ultra_dev/aidevclassroom/aidev_front/src/components/layout/Navbar.tsx), le hook [`usePlacesSprint.ts`](file:///c:/projets/les_ultra_dev/aidevclassroom/aidev_front/src/lib/usePlacesSprint.ts) interroge `GET /api/sprints/:id/enrolled-count` (`cache: "no-store"`) côté client et écoute l'événement `aidev:inscription-maj` pour actualiser la jauge sans attendre l'expiration du cache ISR (`900 s`). `quotaConnu` (`quota !== null && quota > 0`) et `inscritsConnus` (`inscrits !== null`) sont évalués séparément :
   - si les deux sont connus : la jauge affiche `{inscrits} / {quota} places réservées` (et `· complet` si `inscrits >= quota`) et le bandeau mobile affiche `{placesRestantes} places restantes` ;
   - si seul le quota est connu (API sans compteur ou réponse en cache antérieure) : la jauge affiche `[À DÉTERMINER] / {quota} places réservées` et le bandeau mobile `[À DÉTERMINER] places restantes · {quota} places` ;
   - si le quota n'est pas défini (`null` ou `<= 0`) : affichage `[À DÉTERMINER]`.
@@ -105,14 +110,14 @@ stateDiagram-v2
 | `PATCH` | `/sprints/:id/status` | JWT `ADMIN` | Transitionne le statut |
 | `DELETE` | `/sprints/:id` | JWT `ADMIN` | Supprime un sprint sans inscription |
 
-### 5.2 Écrans Frontend (`aidevsprint`)
+### 5.2 Écrans Frontend (`aidev_front`)
 
 | Route / Fichier | Rôle |
 |---|---|
-| `/` ([`page.tsx`](file:///c:/projets/les_ultra_dev/aidevclassroom/aidevsprint/src/app/page.tsx)) | Consomme `GET /sprints` côté SSR pour hydrater les tarifs, dates et la modale d'inscription |
-| `/admin/sprints` ([`page.tsx`](file:///c:/projets/les_ultra_dev/aidevclassroom/aidevsprint/src/app/admin/(panneau)/sprints/page.tsx)) | Liste paginée, filtre par statut, actions de transition rapide (« Lancer », « Mettre en pause », etc.) |
-| `/admin/sprints/nouveau` ([`page.tsx`](file:///c:/projets/les_ultra_dev/aidevclassroom/aidevsprint/src/app/admin/(panneau)/sprints/nouveau/page.tsx)) | Formulaire de création avec option « Lancer » dès la création (`ACTIVE`) |
-| `/admin/sprints/[id]/modifier` ([`page.tsx`](file:///c:/projets/les_ultra_dev/aidevclassroom/aidevsprint/src/app/admin/(panneau)/sprints/[id]/modifier/page.tsx)) | Édition des champs modifiables (slug non éditable) |
+| `/` ([`page.tsx`](file:///c:/projets/les_ultra_dev/aidevclassroom/aidev_front/src/app/page.tsx)) | Consomme `GET /sprints` côté SSR pour hydrater les tarifs, dates, infos logistiques, modules et la modale d'inscription |
+| `/admin/sprints` ([`page.tsx`](file:///c:/projets/les_ultra_dev/aidevclassroom/aidev_front/src/app/admin/(panneau)/sprints/page.tsx)) | Liste paginée, filtre par statut, actions de transition rapide (« Lancer », « Mettre en pause », etc.) |
+| `/admin/sprints/nouveau` ([`page.tsx`](file:///c:/projets/les_ultra_dev/aidevclassroom/aidev_front/src/app/admin/(panneau)/sprints/nouveau/page.tsx)) | Formulaire de création avec option « Lancer » dès la création (`ACTIVE`) |
+| `/admin/sprints/[id]/modifier` ([`page.tsx`](file:///c:/projets/les_ultra_dev/aidevclassroom/aidev_front/src/app/admin/(panneau)/sprints/[id]/modifier/page.tsx)) | Édition des champs modifiables (slug non éditable) |
 
 ---
 
@@ -126,6 +131,5 @@ stateDiagram-v2
 
 ## 7. Évolutions prévues (To-Be)
 
-1. **Métadonnées logistiques en base** : déplacer les attributs aujourd'hui codés en dur dans `FAITS_LOCAUX` (`ville`, `lieu`, `format`, `horaires`) vers des champs dédiés du modèle `Sprint`.
-2. **Filtrage et tri multi-critères** : ajouter la recherche textuelle et le tri par date de session sur `/admin/sprints`.
-3. **Rafraîchissement client périodique du compteur** : consommer `GET /sprints/:id/enrolled-count` côté client pour actualiser la jauge de places sans attendre l'expiration du cache ISR (`revalider: 900`) de `GET /sprints`.
+1. **Filtrage et tri multi-critères** : ajouter la recherche textuelle et le tri par date de session sur `/admin/sprints`.
+*(Note : les métadonnées logistiques en base `city`, `location`, `format`, `level`, `modules` et le rafraîchissement client `usePlacesSprint.ts` ont été implémentés dans la migration `0004_dynamic_sprints_and_content`.)*

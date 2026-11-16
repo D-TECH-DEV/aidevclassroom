@@ -1,12 +1,35 @@
 # ==============================================================================
-# Environnement PRODUCTION — Docker Compose (compose.prod.yml)
-# Architecture haute disponibilité, Nginx reverse proxy, limites de ressources
-# AUCUN SERVICE POSTGRESQL (PostgreSQL externe administré sur le VPS)
+# Environnement PRODUCTION VPS (sans Coolify) — Docker Compose (compose.prod.yml)
+# Stack complète et autonome : PostgreSQL + Backend + Frontend + Reverse Proxy Nginx
 # ==============================================================================
 
 name: aidev-prod
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: aidev-postgres-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-aidev_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-aidev_db}
+    volumes:
+      - aidev-pgdata-prod:/var/lib/postgresql/data
+    networks:
+      - aidev-prod-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-aidev_user} -d $${POSTGRES_DB:-aidev_db}"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
   backend:
     build:
       context: ./aidev_api
@@ -18,14 +41,11 @@ services:
       - ${ENV_FILE:-.env.prod}
     expose:
       - "3000"
-    extra_hosts:
-      # Permet de joindre le PostgreSQL du VPS s'il est exécuté directement sur l'hôte Ubuntu
-      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
-      # aidev-prod-net : réseau isolé de la stack ; main-network : réseau
-      # mutualisé du VPS (conteneur PostgreSQL 'postgres' + Nginx Proxy Manager)
       - aidev-prod-net
-      - main-network
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/v1/health | grep -q '\"status\":\"ok\"' || exit 1"]
       interval: 30s
@@ -48,7 +68,7 @@ services:
 
   frontend:
     build:
-      context: ./aidevsprint
+      context: ./aidev_front
       target: prod
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
@@ -92,14 +112,12 @@ services:
     container_name: aidev-proxy-prod
     restart: unless-stopped
     ports:
-      # 80/443 de l'hôte sont occupés par Nginx Proxy Manager : on publie le
-      # proxy uniquement en local pour les tests directs (le trafic public
-      # passe par NPM -> http://aidev-proxy-prod:80 sur main-network)
-      - "127.0.0.1:${HTTP_PORT:-8081}:80"
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
-      # Volume pour le stockage des certificats Let's Encrypt / Certbot sur le VPS
+      # Volumes pour le stockage des certificats Let's Encrypt / Certbot sur le VPS
       - certbot-etc:/etc/letsencrypt
       - certbot-var:/var/www/certbot
     depends_on:
@@ -109,7 +127,6 @@ services:
         condition: service_healthy
     networks:
       - aidev-prod-net
-      - main-network
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost/healthz | grep -q 'healthy' || exit 1"]
       interval: 30s
@@ -131,7 +148,8 @@ services:
         max-file: "3"
 
 volumes:
-  # Volumes applicatifs pour les certificats SSL Nginx / Certbot (aucun volume de données DB)
+  aidev-pgdata-prod:
+    name: aidev-pgdata-prod
   certbot-etc:
     name: aidev-certbot-etc
   certbot-var:
@@ -141,8 +159,3 @@ networks:
   aidev-prod-net:
     name: aidev-prod-network
     driver: bridge
-  # Réseau mutualisé préexistant du VPS (PostgreSQL 'postgres', Nginx Proxy
-  # Manager). Externe : Compose ne le crée ni ne le supprime.
-  main-network:
-    name: main-network
-    external: true

@@ -1,6 +1,6 @@
 # PRD 05 - Dashboard et administration
 
-**Modules couverts :** `aidev_api/src/dashboard`, `aidev_api/src/health` | `aidevsprint/src/app/admin/(panneau)/layout.tsx`, `aidevsprint/src/app/admin/(panneau)/page.tsx`, `aidevsprint/src/components/admin/*`, `aidevsprint/src/lib/admin/*`
+**Modules couverts :** `aidev_api/src/dashboard`, `aidev_api/src/health`, `aidev_api/src/site-content` | `aidev_front/src/app/admin/(panneau)/layout.tsx`, `aidev_front/src/app/admin/(panneau)/page.tsx`, `aidev_front/src/app/admin/(panneau)/contenu/page.tsx`, `aidev_front/src/components/admin/*`, `aidev_front/src/lib/admin/*`
 
 ---
 
@@ -14,7 +14,7 @@ Fournir aux organisateurs un tableau de bord unifié regroupant les indicateurs 
 
 | Acteur | Permissions et usage |
 |---|---|
-| Administrateur (`ADMIN`) | Accède à `/admin` et à ses sous-écrans (`/admin/sprints`, `/admin/inscriptions`, `/admin/paiements`) via session cookie `httpOnly` + JWT. |
+| Administrateur (`ADMIN`) | Accède à `/admin` et à ses sous-écrans (`/admin/sprints`, `/admin/inscriptions`, `/admin/paiements`, `/admin/contenu`) via session cookie `httpOnly` + JWT. |
 | Docker / Nginx / CI-CD | Interroge `GET /api/v1/health` (sans authentification) pour vérifier la disponibilité du backend et de la base PostgreSQL. |
 
 ---
@@ -61,10 +61,10 @@ Exécute `SELECT 1` via Prisma (`up` ou `down`) et retourne toujours HTTP `200` 
 - **RG-DSH-03 (Plafonnement actuel de `summary()`)** : `summary()` récupère jusqu'à `2000` inscriptions non annulées (`take: 2000`) puis calcule `totalOutstandingXof` en JavaScript. `recentEnrollments` et `recentPayments` renvoient les 10 derniers enregistrements (ou `limit` borné entre `1` et `50` sur les endpoints dédiés).
 - **RG-DSH-04 (Séries journalières `collections`)** : `GET /admin/dashboard/collections?from&to` calcule `totalXof` et `count` via Prisma sur la plage `paidAt` demandée, et produit `byDay` (30 jours) via requête SQL brute groupée par `DATE("paid_at")`. **Anomalie identifiée :** la requête SQL brute produisant `byDay` ne filtre pas sur `from`/`to`.
 
-### 4.2 Ergonomie du panneau `/admin` (`aidevsprint`)
+### 4.2 Ergonomie du panneau `/admin` (`aidev_front`)
 
 - Rendu strictement dynamique (`export const dynamic = "force-dynamic"` dans `(panneau)/layout.tsx`), entouré de frontières `<Suspense>`.
-- Navigation à 4 entrées : `Tableau de bord`, `Sprints`, `Inscriptions`, `Paiements`.
+- Navigation à 5 entrées : `Tableau de bord`, `Sprints`, `Inscriptions`, `Paiements`, `Contenu vitrine`.
 - Filtres persistés en query string URL (`?statut=&search=&page=` ou `?statut=&reference=&page=`) pour permettre le partage d'URL et l'usage du bouton Retour navigateur.
 - Affichage des boutons de transition d'inscription filtré selon `TRANSITIONS` et la règle `remainingAmountXof === 0` pour `COMPLETED` (l'écran affiche un message explicatif tant que le dossier n'est pas soldé).
 - Libellés, dates (`fr-FR`) et montants (`X XXX FCFA` sans décimales) centralisés dans `src/lib/admin/types.ts`.
@@ -92,6 +92,7 @@ Exécute `SELECT 1` via Prisma (`up` ou `down`) et retourne toujours HTTP `200` 
 | `/admin/sprints` (+ `nouveau`, `[id]/modifier`) | Gestion catalogue et statuts sprints (voir [PRD 02](file:///c:/projets/les_ultra_dev/aidevclassroom/docs/prd/02-sprints-et-catalogue.md)) |
 | `/admin/inscriptions` (+ `[id]`) | Suivi inscriptions et transitions (voir [PRD 03](file:///c:/projets/les_ultra_dev/aidevclassroom/docs/prd/03-inscriptions-et-participants.md)) |
 | `/admin/paiements` | Liste paiements et revérification (voir [PRD 04](file:///c:/projets/les_ultra_dev/aidevclassroom/docs/prd/04-paiements-et-paystack.md)) |
+| `/admin/contenu` | Édition du contact WhatsApp, des formateurs et des questions FAQ (`FormulaireContenu.tsx`) |
 
 ---
 

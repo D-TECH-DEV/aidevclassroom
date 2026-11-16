@@ -1,6 +1,6 @@
 # PRD 03 - Inscriptions et participants
 
-**Modules couverts :** `aidev_api/src/enrollments`, `aidev_api/src/students`, `aidev_api/src/common/guards/tracking-token.guard.ts` | `aidevsprint/src/components/inscription`, `aidevsprint/src/components/paiement/ReprendrePaiement.tsx`, `aidevsprint/src/app/admin/(panneau)/inscriptions`
+**Modules couverts :** `aidev_api/src/enrollments`, `aidev_api/src/students`, `aidev_api/src/common/guards/tracking-token.guard.ts` | `aidev_front/src/components/inscription`, `aidev_front/src/components/paiement/ReprendrePaiement.tsx`, `aidev_front/src/app/admin/(panneau)/inscriptions`
 
 ---
 
@@ -74,7 +74,7 @@ Note : la transition `CONFIRMED -> COMPLETED` requiert impérativement `remainin
 
 ### 4.3 Jeton de suivi & Reprise par e-mail (`TrackingTokenGuard`)
 
-- **RG-ENR-05 (Hashage SHA-256 à usage unique d'affichage)** : à la création, le serveur génère un `trackingToken` aléatoire, stocke son hash SHA-256 dans `tracking_token_hash` et ne renvoie le jeton en clair qu'une fois dans la réponse `201`. Côté navigateur, `aidevsprint` le persiste dans `localStorage` (`aidevsprint.*`).
+- **RG-ENR-05 (Hashage SHA-256 à usage unique d'affichage)** : à la création, le serveur génère un `trackingToken` aléatoire, stocke son hash SHA-256 dans `tracking_token_hash` et ne renvoie le jeton en clair qu'une fois dans la réponse `201`. Côté navigateur, `aidev_front` le persiste dans `localStorage` (`aidevsprint.*`).
 - **RG-ENR-06 (Récupération par e-mail avec rotation de jeton)** : `POST /enrollments/by-email` (`10 req/min`) recherche tous les dossiers d'un e-mail ; s'il en existe, il génère un **nouveau** `trackingToken` par dossier, écrase `tracking_token_hash` en base (invalidant l'ancien jeton) et renvoie les dossiers avec leurs nouveaux jetons et soldes. Si l'e-mail est inconnu, il retourne `{ dossiers: [] }`. **Limite assumée :** aucune vérification OTP par e-mail n'est demandée à ce stade.
 
 ---
@@ -98,7 +98,7 @@ Note : la transition `CONFIRMED -> COMPLETED` requiert impérativement `remainin
 | `PATCH` | `/admin/enrollments/:id/status` | JWT `ADMIN` | Transition de statut (`PENDING -> CONFIRMED -> COMPLETED`, ou `CANCELLED`) |
 | `GET` | `/admin/enrollments/:id/payments` | JWT `ADMIN` | Liste des paiements du dossier |
 
-### 5.2 Écrans Frontend (`aidevsprint`)
+### 5.2 Écrans Frontend (`aidev_front`)
 
 | Composant / Route | Description |
 |---|---|

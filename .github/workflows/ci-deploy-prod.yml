@@ -38,7 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: aidevsprint
+        working-directory: aidev_front
     steps:
       - name: Recuperer le code
         uses: actions/checkout@v4
@@ -48,7 +48,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: aidevsprint/package-lock.json
+          cache-dependency-path: aidev_front/package-lock.json
 
       - name: Installer les dependances
         run: npm ci

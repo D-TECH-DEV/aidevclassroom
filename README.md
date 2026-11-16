@@ -1,6 +1,6 @@
 # Aidev Classroom (`aidevclassroom`)
 
-Plateforme de gestion et d'inscription aux sessions de formation intensives **AIdevsprint** : site vitrine public, tunnel d'inscription (forfaits Solo et Duo) avec paiement échelonné Paystack / Mobile Money en XOF, suivi participant par jeton sécurisé et back-office d'administration.
+Plateforme de gestion et d'inscription aux sessions de formation intensives **AIDevClassroom** : site vitrine public, tunnel d'inscription (forfaits Solo et Duo) avec paiement échelonné Paystack / Mobile Money en XOF, suivi participant par jeton sécurisé et back-office d'administration.
 
 ---
 
@@ -9,9 +9,9 @@ Plateforme de gestion et d'inscription aux sessions de formation intensives **AI
 Le dépôt est un monorepo regroupant deux applications TypeScript découplées orchestrées par Docker Compose :
 
 - **`aidev_api` (Backend REST)** : NestJS 11, TypeScript `5.7.3`, Prisma `7.10.1` (`@prisma/adapter-pg`), PostgreSQL, Passport JWT, `bcrypt`, `@nestjs/throttler`, `@nestjs/swagger` et intégration Paystack REST + Webhook HMAC-SHA512.
-- **`aidevsprint` (Frontend Web & BFF Admin)** : Next.js `16.4.2` (App Router, `output: "standalone"`), React `19.3.0`, Tailwind CSS `^4`, GSAP `^3.15.0`, Lenis `^1.3.27` et Three.js `^0.180.0`.
-- **PostgreSQL** : hébergé en conteneur local en développement (`compose.dev.yml`), et externe aux conteneurs applicatifs en préproduction et production.
-- **Nginx (`nginx:1.27-alpine`)** : reverse proxy utilisé en `preprod` et `prod` pour router `/api/v1/` vers le backend et `/` + `/api/` (relais même-origine) vers le frontend.
+- **`aidev_front` (Frontend Web & BFF Admin)** : Next.js `16.4.2` (App Router, `output: "standalone"`), React `19.3.0`, Tailwind CSS `^4`, GSAP `^3.15.0`, Lenis `^1.3.27` et Three.js `^0.180.0`.
+- **PostgreSQL 16** : inclus directement dans les 3 piles Docker Compose (`compose.dev.yml` pour test/préprod, `compose.prod.yml` pour VPS sans Coolify, `compose.coolify.yml` pour Coolify).
+- **Nginx (`nginx:1.27-alpine`)** : reverse proxy intégré en production (et activable via le profil `preprod` en test local) pour router `/api/v1/` vers le backend et `/` + `/api/` (relais même-origine) vers le frontend.
 
 ---
 
@@ -114,24 +114,25 @@ aidevclassroom/
 |   |-- src/                 # Modules métier (auth, admins, students, sprints, enrollments, payments, dashboard, health)
 |   |-- test/                # Tests E2E NestJS (fauxPrisma + fauxFetch)
 |   `-- Dockerfile
-|-- aidevsprint/             # Frontend Next.js 16 (App Router, Tailwind CSS v4, GSAP, Lenis, Three.js)
-|   |-- public/              # Portraits et textures badges 3D
+|-- aidev_front/             # Frontend Next.js 16 (App Router, Tailwind CSS v4, GSAP, Lenis, Three.js)
+|   |-- public/              # Portraits, textures badges 3D et logos AIDevClassroom
 |   |-- src/
 |   |   |-- app/             # Pages publiques (/), paiement (/paiement/*), relais (/api/*), panneau (/admin/*)
 |   |   |-- components/      # Composants UI, sections landing, modale d'inscription, composants admin
-|   |   |-- lib/             # Clients API, adaptation Edition, logique paiement/localStorage, session admin
+|   |   |-- lib/             # Clients API, adaptation Edition, contenu éditorial, jauge live, paiement, session admin
 |   |   `-- proxy.ts         # Garde d'accès Next.js sur /admin/*
 |   `-- Dockerfile
 |-- deploy/                  # Documentation d'exploitation VPS, Nginx, SSL et base de données
-|-- docs/                    # Base de connaissances (SESSION.md, prd/, workflows/, design/)
+|-- design/                  # Maquettes et sources graphiques
+|-- docs/                    # Base de connaissances unifiée (SESSION.md, prd/, workflows/, api/, stack.md, design.md, admin.md)
 |-- nginx/                   # Configuration Nginx interne (preprod et prod)
 |-- scripts/                 # Scripts Bash d'exploitation Docker Compose
-|-- compose.dev.yml          # Stack développement (PostgreSQL en conteneur + backend + frontend)
-|-- compose.preprod.yml      # Stack préproduction (backend + frontend + proxy Nginx)
-|-- compose.prod.yml         # Stack production (limites ressources + réseau externe main-network)
-|-- .env.dev.example         # Modèle variables dev
-|-- .env.preprod.example     # Modèle variables preprod
-|-- .env.prod.example        # Modèle variables prod
+|-- compose.dev.yml          # Stack unifiée dev / test / préprod (profil preprod pour Nginx)
+|-- compose.prod.yml         # Stack complète production VPS sans Coolify (PG + API + Front + Nginx)
+|-- compose.coolify.yml      # Stack complète production Coolify (PG + Migrate + API + Front + Nginx)
+|-- .env.dev.example         # Modèle variables dev / test / préprod
+|-- .env.prod.example        # Modèle variables production VPS
+|-- .env.coolify.example     # Modèle variables production Coolify
 `-- AGENTS.md                # Règles système et standards d'ingénierie
 ```
 
@@ -143,16 +144,16 @@ aidevclassroom/
 
 | Script | Usage | Rôle |
 |---|---|---|
-| `scripts/start.sh` | `./scripts/start.sh [dev\|preprod\|prod] [service]` | Démarre les conteneurs en arrière-plan puis affiche l'état |
-| `scripts/stop.sh` | `./scripts/stop.sh [dev\|preprod\|prod]` | Arrête les conteneurs (`down` sans suppression de volumes) |
-| `scripts/restart.sh` | `./scripts/restart.sh [dev\|preprod\|prod] [service]` | Redémarre tout ou un service spécifique |
-| `scripts/build.sh` | `./scripts/build.sh [dev\|preprod\|prod] [service]` | Construit les images Docker |
-| `scripts/migrate.sh` | `./scripts/migrate.sh [dev\|preprod\|prod] [--seed]` | Exécute `prisma migrate deploy` (et `--seed` optionnel) via un conteneur éphémère |
-| `scripts/deploy.sh` | `./scripts/deploy.sh [dev\|preprod\|prod] [--with-migrations]` | Build, migrations optionnelles, démarrage et attente healthchecks (90s) |
+| `scripts/start.sh` | `./scripts/start.sh [dev\|prod\|coolify] [service]` | Démarre les conteneurs en arrière-plan puis affiche l'état |
+| `scripts/stop.sh` | `./scripts/stop.sh [dev\|prod\|coolify]` | Arrête les conteneurs (`down` sans suppression de volumes) |
+| `scripts/restart.sh` | `./scripts/restart.sh [dev\|prod\|coolify] [service]` | Redémarre tout ou un service spécifique |
+| `scripts/build.sh` | `./scripts/build.sh [dev\|prod\|coolify] [service]` | Construit les images Docker |
+| `scripts/migrate.sh` | `./scripts/migrate.sh [dev\|prod\|coolify] [--seed]` | Exécute `prisma migrate deploy` (et `--seed` optionnel) via un conteneur éphémère |
+| `scripts/deploy.sh` | `./scripts/deploy.sh [dev\|prod\|coolify] [--with-migrations]` | Build, migrations optionnelles, démarrage et attente healthchecks (90s) |
 | `scripts/ci-deploy.sh` | `./scripts/ci-deploy.sh prod` | Déploiement non interactif CI/CD avec vérification HTTP et rollback applicatif auto en cas d'échec |
-| `scripts/rollback.sh` | `./scripts/rollback.sh [dev\|preprod\|prod] <TAG_API> [TAG_FRONT]` | Restaure des tags d'images précédents (n'annule pas les migrations Prisma) |
-| `scripts/logs.sh` | `./scripts/logs.sh [dev\|preprod\|prod] [service] [-f]` | Consulte les journaux des conteneurs |
-| `scripts/status.sh` | `./scripts/status.sh [dev\|preprod\|prod]` | Affiche l'état des conteneurs et leur statut de healthcheck |
+| `scripts/rollback.sh` | `./scripts/rollback.sh [dev\|prod\|coolify] <TAG_API> [TAG_FRONT]` | Restaure des tags d'images précédents (n'annule pas les migrations Prisma) |
+| `scripts/logs.sh` | `./scripts/logs.sh [dev\|prod\|coolify] [service] [-f]` | Consulte les journaux des conteneurs |
+| `scripts/status.sh` | `./scripts/status.sh [dev\|prod\|coolify]` | Affiche l'état des conteneurs et leur statut de healthcheck |
 
 ### 6.2 Commandes de développement applicatif
 
@@ -168,7 +169,7 @@ docker exec aidev-api-dev npm run lint
 docker exec aidev-api-dev npm run build
 ```
 
-**Frontend (`aidevsprint`) :**
+**Frontend (`aidev_front`) :**
 
 ```bash
 # Vérification stricte TypeScript et compilation Next.js
@@ -182,13 +183,13 @@ docker exec aidev-frontend-dev npm run build
 
 | Environnement | Fichier Compose | Base de données | Proxy Nginx | Port hôte |
 |---|---|---|---|---|
-| `dev` | `compose.dev.yml` | Conteneur `aidev-postgres-dev` (volume `aidev-pgdata-dev`) | Non (accès direct `:3000` / `:3001`) | Frontend `3000`, Backend `3001`, PG `5432` |
-| `preprod` | `compose.preprod.yml` | PostgreSQL externe (`DATABASE_URL`) | Conteneur `aidev-proxy-preprod` | `8080` / `8443` |
-| `prod` | `compose.prod.yml` | PostgreSQL externe sur `main-network` | Conteneur `aidev-proxy-prod` derrière Nginx Proxy Manager | `127.0.0.1:8081` |
+| `dev` (test / préprod) | `compose.dev.yml` | Conteneur `aidev-postgres-dev` (`aidev-pgdata-dev`) | Optionnel (`--profile preprod`) | Front `3000`, Back `3001`, PG `5432` (Nginx `8080`/`8443`) |
+| `prod` (VPS autonome) | `compose.prod.yml` | Conteneur `aidev-postgres-prod` (`aidev-pgdata-prod`) | Inclus (`aidev-proxy-prod`) | `80` / `443` |
+| `coolify` (Prod Coolify) | `compose.coolify.yml` | Conteneur `postgres` (`aidev-pgdata-coolify`) | Inclus (`proxy` sur `:80` interne pour Traefik) | Aucun (routé par Traefik Coolify) |
 
 **Pipeline GitHub Actions (`.github/workflows/ci-deploy-prod.yml`) :**
 À chaque push sur `main`, le workflow exécute en parallèle :
-1. `verifier-frontend` : `npm ci`, `npx tsc --noEmit`, `npm run build` dans `aidevsprint/`.
+1. `verifier-frontend` : `npm ci`, `npx tsc --noEmit`, `npm run build` dans `aidev_front/`.
 2. `verifier-backend` : `npm ci`, `npx prisma generate` (URL factice de build), `npm test`, `npm run build` dans `aidev_api/`.
 3. `deployer-prod` : connexion SSH stricte vers le VPS, `git reset --hard origin/main` et `./scripts/ci-deploy.sh prod`.
 

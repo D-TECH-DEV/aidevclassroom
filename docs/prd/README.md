@@ -1,6 +1,6 @@
 # Index des PRD - Aidev Classroom (`aidevclassroom`)
 
-Ce dossier regroupe les spécifications produit (PRD) déduites par rétro-ingénierie des modules existants du monorepo (`aidev_api` et `aidevsprint`).
+Ce dossier regroupe les spécifications produit (PRD) déduites par rétro-ingénierie des modules existants du monorepo (`aidev_api` et `aidev_front`).
 
 Chaque document suit une structure homogène en 7 sections et distingue systématiquement :
 
@@ -13,7 +13,7 @@ Chaque document suit une structure homogène en 7 sections et distingue systéma
 
 ## Catalogue des PRDs
 
-| N° | Document | Modules Backend (`aidev_api`) | Écrans / Fichiers Frontend (`aidevsprint`) | Statut fonctionnel |
+| N° | Document | Modules Backend (`aidev_api`) | Écrans / Fichiers Frontend (`aidev_front`) | Statut fonctionnel |
 |---|---|---|---|---|
 | 01 | [01 - Authentification et administrateurs](file:///c:/projets/les_ultra_dev/aidevclassroom/docs/prd/01-authentification-et-administrateurs.md) | `auth`, `admins`, `cli/create-admin.ts`, `common/guards` | `/admin/connexion`, `src/proxy.ts`, `src/lib/admin/session.ts`, `src/app/admin/actions.ts` | Connexion UI opérationnelle ; gestion multi-admins et changement de mot de passe API-only |
 | 02 | [02 - Sprints et catalogue](file:///c:/projets/les_ultra_dev/aidevclassroom/docs/prd/02-sprints-et-catalogue.md) | `sprints` | `/`, `/admin/sprints`, `/admin/sprints/nouveau`, `/admin/sprints/[id]/modifier`, `src/lib/edition.ts` | CRUD admin et catalogue public opérationnels (forfaits Solo/Duo inclus) |

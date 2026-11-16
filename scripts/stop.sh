@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # Arrêt des services — Aidev Classroom
-# Usage : ./scripts/stop.sh [dev|preprod|prod]
+# Usage : ./scripts/stop.sh [dev|prod|coolify]
 # ==============================================================================
 set -Eeuo pipefail
 

@@ -46,12 +46,12 @@ check_prerequisites() {
 }
 
 # Validation de l'environnement passé en argument
-# Valeurs acceptées : dev, preprod, prod
+# Valeurs acceptées : dev (test/préprod unifié), prod (VPS autonome), coolify
 resolve_env() {
     local target_env="${1:-}"
 
     if [[ -z "$target_env" ]]; then
-        log_error "Environnement non spécifié. Usage : $0 [dev|preprod|prod]"
+        log_error "Environnement non spécifié. Usage : $0 [dev|prod|coolify]"
         exit 1
     fi
 
@@ -61,18 +61,18 @@ resolve_env() {
             ENV_FILE="${ROOT_DIR}/.env.dev"
             ENV_NAME="dev"
             ;;
-        preprod)
-            COMPOSE_FILE="${ROOT_DIR}/compose.preprod.yml"
-            ENV_FILE="${ROOT_DIR}/.env.preprod"
-            ENV_NAME="preprod"
-            ;;
         prod)
             COMPOSE_FILE="${ROOT_DIR}/compose.prod.yml"
             ENV_FILE="${ROOT_DIR}/.env.prod"
             ENV_NAME="prod"
             ;;
+        coolify)
+            COMPOSE_FILE="${ROOT_DIR}/compose.coolify.yml"
+            ENV_FILE="${ROOT_DIR}/.env.coolify"
+            ENV_NAME="coolify"
+            ;;
         *)
-            log_error "Environnement invalide : '$target_env'. Choisissez 'dev', 'preprod' ou 'prod'."
+            log_error "Environnement invalide : '$target_env'. Choisissez 'dev', 'prod' ou 'coolify'."
             exit 1
             ;;
     esac

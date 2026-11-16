@@ -1,6 +1,6 @@
 # PRD 06 - Vitrine et parcours public
 
-**Modules couverts :** `aidevsprint/src/app/page.tsx`, `aidevsprint/src/app/layout.tsx`, `aidevsprint/src/app/globals.css`, `aidevsprint/src/app/api/[...chemin]/route.ts`, `aidevsprint/src/components/{hero,sections,formateurs,backgrounds,layout,motion,ui,inscription}` | `aidevsprint/src/lib/{edition.ts,formateurs.ts,api.ts}`
+**Modules couverts :** `aidev_front/src/app/page.tsx`, `aidev_front/src/app/layout.tsx`, `aidev_front/src/app/globals.css`, `aidev_front/src/app/api/[...chemin]/route.ts`, `aidev_front/src/components/{hero,sections,formateurs,backgrounds,layout,motion,ui,inscription}` | `aidev_front/src/lib/{edition.ts,contenu.ts,usePlacesSprint.ts,formateurs.ts,api.ts}`
 
 ---
 
@@ -15,22 +15,23 @@ Présenter l'offre de formation AIdevsprint (« Le vibe coding, bien fait » - u
 | Acteur | Interaction avec la vitrine |
 |---|---|
 | Visiteur / Développeur candidat | Parcourt la landing page sur desktop ou mobile, manipule les badges 3D WebGL, consulte le programme, les tarifs Solo/Duo et la FAQ, puis réserve sa place via la modale ou reprend un paiement via `/paiement/reprendre`. |
-| Équipe éditoriale / Formateurs | Alimente les données sprints dynamiques via l'admin et maintient les contenus statiques (`edition.ts`, `formateurs.ts`, `Faq.tsx`). |
+| Équipe éditoriale / Formateurs | Alimente les données sprints dynamiques via `/admin/sprints` et les contenus éditoriaux globaux (`site_settings`, `trainers`, `faqs`) via `/admin/contenu`. |
 
 ---
 
 ## 3. Modèle de données & Contrats (As-Is)
 
-### 3.1 Hydratation SSR (`GET /api/v1/sprints` -> `Edition`)
+### 3.1 Hydratation SSR (`GET /api/v1/sprints` et `GET /api/v1/site-content`)
 
-`aidevsprint/src/app/page.tsx` charge côté serveur les sprints publics via `editionsOuvertes()` (`src/lib/edition.ts`), qui transforme chaque sprint API en objet `Edition` :
-- `id`, `nom`, `slug`, `prixFCFA`, `minimumFCFA`, `prixDuoFCFA`, `minimumDuoFCFA`, `debut`, `fin`, `quota`, `statut`.
-- Champs encore figés/manquants côté API publique : `inscrits: null`, `FAITS_LOCAUX` (`ville`, `lieu`, `format` définis en dur dans `edition.ts`).
+`aidev_front/src/app/page.tsx` charge en parallèle côté serveur :
+- les sprints publics via `recupereSprints()` (`src/lib/edition.ts`), qui transforme chaque sprint API en objet `Edition` (`id`, `nom`, `slug`, `prixFCFA`, `minimumFCFA`, `prixDuoFCFA`, `minimumDuoFCFA`, `debut`, `fin`, `quota`, `inscrits`, `statut`, `ville`, `lieu`, `format`, `niveau`, `modules`, avec replis `FAITS_LOCAUX` et `MODULES_DEFAUT`) ;
+- le contenu éditorial global via `recupereContenuSite()` (`src/lib/contenu.ts`), qui interroge `GET /site-content` (`whatsappDisplay`, `whatsappHref`, `trainers`, `faqs`).
 
-### 3.2 Données éditoriales statiques (`As-Is`)
+### 3.2 Rafraîchissement client & relais navigateur (`As-Is`)
 
-- **`FORMATEURS` (`src/lib/formateurs.ts`)** : 3 intervenants (`Youssouf`, `Malik`, `Victorien`) avec portraits (`/formateurs/*.png`) et textures de badges 3D (`/badges/*.png`).
-- **Relais navigateur (`src/app/api/[...chemin]/route.ts`)** : liste blanche stricte des préfixes relayés (`sprints`, `enrollments`, `payments`, `students`, `health`), en mode même-origine sans exposition de l'URL backend privée.
+- **Jauge en direct (`src/lib/usePlacesSprint.ts`)** : `usePlacesSprint()` rafraîchit le compteur `inscrits / quota` côté client via `GET /api/sprints/:id/enrolled-count` (`cache: "no-store"`) et écoute `aidev:inscription-maj` pour `SeatsGauge` et `Navbar`.
+- **Relais navigateur (`src/app/api/[...chemin]/route.ts`)** : liste blanche stricte des préfixes relayés (`sprints`, `site-content`, `enrollments`, `payments`, `students`, `health`), en mode même-origine sans exposition de l'URL backend privée.
+- **Compatibilité formateurs (`src/lib/formateurs.ts`)** : fichier historique conservé par prudence mais non importé par la vitrine (les formateurs proviennent désormais de `GET /site-content`).
 
 ---
 
@@ -65,26 +66,25 @@ La landing page assemble dans un contexte `ModaleInscription` (géré par `<dial
 | `/` (`src/app/page.tsx`) | Frontend SSR | Landing page complète |
 | `/paiement/reprendre` | Frontend | Reprise d'inscription/solde par e-mail (sans navbar, avec footer) |
 | `/paiement/retour` | Frontend | Vérification Paystack au retour (sans navbar, `robots: noindex, nofollow`) |
-| `GET /api/[...chemin]` & `POST /api/[...chemin]` | Frontend Route Handler | Relais vers `aidev_api` limité à `sprints`, `enrollments`, `payments`, `students`, `health` |
+| `GET /api/[...chemin]` & `POST /api/[...chemin]` | Frontend Route Handler | Relais vers `aidev_api` limité à `sprints`, `site-content`, `enrollments`, `payments`, `students`, `health` |
 | `GET /api/v1/sprints` | Backend API | Liste des sprints `ACTIVE` et `INACTIVE` |
+| `GET /api/v1/site-content` | Backend API | Contenus éditoriaux globaux (`whatsappDisplay`, `whatsappHref`, `trainers`, `faqs`) |
 
 ---
 
 ## 6. Cas limites, Sécurité & Données incomplètes
 
-- **Contenus éditoriaux non finalisés (`As-Is`)** :
-  - `SeatsGauge` affiche `Nombre de places [À DÉTERMINER]` tant que `inscrits` vaut `null` dans `edition.ts`.
-  - `formateurs.ts` contient plusieurs champs à `null` (`nom`, `transmet` de Victorien, `liens`) rendus avec `[À COMPLÉTER]`.
-  - `Faq.tsx` contient une réponse #3 à `null` rendue avec `[À COMPLÉTER]`.
+- **Contenus éditoriaux et replis (`As-Is`)** :
+  - `SeatsGauge` et `Navbar` affichent `[À DÉTERMINER]` si `quota` ou `inscrits` ne sont pas encore disponibles.
+  - `Formateurs` et `Faq` affichent `[À COMPLÉTER]` si un champ éditorial issu de `GET /site-content` est vide/null côté base.
 - **Relais `/api/[...chemin]` et rate-limit** : les en-têtes `x-forwarded-for` du visiteur ne sont pas transmis au backend ; tous les appels publics navigateur arrivent sur NestJS avec l'IP du conteneur frontend.
 - **Dépendance JS sur la modale** : sans JavaScript côté client, la réservation en modale n'est pas disponible (le repli reste le lien direct WhatsApp dans la section `Session`).
-- **Absence de tests frontend automatisés** : la CI valide uniquement `tsc --noEmit` et `npm run build` (`aidevsprint/package.json` ne comporte pas de script `test`).
+- **Absence de tests frontend automatisés** : la CI valide uniquement `tsc --noEmit` et `npm run build` (`aidev_front/package.json` ne comporte pas de script `test`).
 
 ---
 
 ## 7. Évolutions prévues (To-Be)
 
-1. **Compléter les données éditoriales manquantes** : renseigner le profil de Victorien et les liens sociaux dans `formateurs.ts`, la réponse #3 dans `Faq.tsx`, et dynamiser/confirmer le lieu et le format précis (ou les rattacher au modèle `Sprint` en base).
-2. **Brancher `SeatsGauge` sur le taux de remplissage réel** : consommer le futur champ public de places occupées renvoyé par `GET /api/v1/sprints` afin d'afficher la jauge animée en temps réel.
-3. **Corriger le transfert IP dans `/api/[...chemin]/route.ts`** : transmettre l'IP client via `x-forwarded-for` et configurer Express `trust proxy` côté NestJS pour isoler les quotas anti-spam par visiteur.
-4. **Ajouter une suite de tests E2E / composants sur `aidevsprint`** : couvrir au moins les flux critiques (ouverture modale, validation Solo/Duo, parcours Charge/Checkout simulé, `/paiement/retour` et `/paiement/reprendre`).
+1. **Corriger le transfert IP dans `/api/[...chemin]/route.ts`** : transmettre l'IP client via `x-forwarded-for` et configurer Express `trust proxy` côté NestJS pour isoler les quotas anti-spam par visiteur.
+2. **Ajouter une suite de tests E2E / composants sur `aidev_front`** : couvrir au moins les flux critiques (ouverture modale, validation Solo/Duo, parcours Charge/Checkout simulé, `/paiement/retour` et `/paiement/reprendre`).
+3. **Upload direct d'images formateurs** : permettre l'envoi de portraits et textures de badges 3D depuis `/admin/contenu` sans dépôt manuel préalable dans `aidev_front/public/`.

@@ -6,6 +6,7 @@ export interface EnvVars {
   JWT_SECRET: string;
   JWT_EXPIRES_IN: string;
   PAYSTACK_SECRET_KEY: string;
+  PAYSTACK_PUBLIC_KEY?: string;
   PAYSTACK_BASE_URL: string;
   PAYSTACK_CALLBACK_URL: string;
   PAYSTACK_CURRENCY: string;
@@ -68,6 +69,7 @@ export function validateEnv(config: Record<string, unknown>): EnvVars {
     JWT_SECRET: jwtSecret,
     JWT_EXPIRES_IN: get('JWT_EXPIRES_IN', '1h'),
     PAYSTACK_SECRET_KEY: get('PAYSTACK_SECRET_KEY', 'sk_test_replace_me'),
+    PAYSTACK_PUBLIC_KEY: get('PAYSTACK_PUBLIC_KEY', ''),
     PAYSTACK_BASE_URL: get('PAYSTACK_BASE_URL', 'https://api.paystack.co'),
     PAYSTACK_CALLBACK_URL: get(
       'PAYSTACK_CALLBACK_URL',

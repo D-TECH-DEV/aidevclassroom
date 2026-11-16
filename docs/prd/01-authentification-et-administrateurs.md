@@ -1,6 +1,6 @@
 # PRD 01 - Authentification et administrateurs
 
-**Modules couverts :** `aidev_api/src/auth`, `aidev_api/src/admins`, `aidev_api/src/cli/create-admin.ts`, `aidev_api/src/common/guards` | `aidevsprint/src/app/admin/connexion`, `aidevsprint/src/app/admin/actions.ts`, `aidevsprint/src/lib/admin/session.ts`, `aidevsprint/src/proxy.ts`
+**Modules couverts :** `aidev_api/src/auth`, `aidev_api/src/admins`, `aidev_api/src/cli/create-admin.ts`, `aidev_api/src/common/guards` | `aidev_front/src/app/admin/connexion`, `aidev_front/src/app/admin/actions.ts`, `aidev_front/src/lib/admin/session.ts`, `aidev_front/src/proxy.ts`
 
 ---
 
@@ -59,7 +59,7 @@ Ce PRD ne couvre pas l'authentification des participants publics, qui repose sur
 - **RG-ADM-01 (Création forcée ADMIN)** : `POST /admins` force le rôle `'ADMIN'` et rejette tout doublon d'e-mail avec `409 ADMIN_EMAIL_EXISTS`.
 - **RG-ADM-02 (Protection anti-auto-blocage)** : un administrateur ne peut pas se désactiver lui-même via `PATCH /admins/:id` (`isActive: false`) ni `PATCH /admins/:id/disable` (`400 CANNOT_DISABLE_SELF`).
 
-### 4.3 Session BFF Next.js (`aidevsprint`)
+### 4.3 Session BFF Next.js (`aidev_front`)
 
 - **RG-BFF-01 (Cookie opaque au navigateur)** : lors de la soumission du formulaire `/admin/connexion`, la Server Action appelle `POST /api/v1/auth/login` puis stocke le JWT dans le cookie `httpOnly`, `SameSite=lax` (`secure` en production) nommé `aidevsprint_admin`.
 - **RG-BFF-02 (Double garde-fou `/admin`)** : `src/proxy.ts` redirige vers `/admin/connexion` toute requête `/admin/*` dépourvue du cookie (et redirige vers `/admin` si déjà connecté sur `/admin/connexion`). Chaque Server Component du panneau vérifie également la présence du cookie via `exigeSession()` et gère l'expiration API (`401`/`403` -> redirection `/admin/connexion`).
@@ -81,13 +81,13 @@ Ce PRD ne couvre pas l'authentification des participants publics, qui repose sur
 | `PATCH` | `/admins/:id` | JWT `ADMIN` | Met à jour nom, e-mail ou activation |
 | `PATCH` | `/admins/:id/disable` | JWT `ADMIN` | Désactive un administrateur (`isActive = false`) |
 
-### 5.2 Écrans Frontend (`aidevsprint`)
+### 5.2 Écrans Frontend (`aidev_front`)
 
 | Route / Fichier | État | Description |
 |---|---|---|
-| `/admin/connexion` ([`page.tsx`](file:///c:/projets/les_ultra_dev/aidevclassroom/aidevsprint/src/app/admin/connexion/page.tsx)) | Opérationnel | Formulaire e-mail/mot de passe connecté à la Server Action de connexion |
-| Bouton Déconnexion dans [`layout.tsx`](file:///c:/projets/les_ultra_dev/aidevclassroom/aidevsprint/src/app/admin/(panneau)/layout.tsx) | Opérationnel | Formulaire POST déclenchant l'action `deconnexion` (suppression du cookie) |
-| Gestion admins & changement de mot de passe | Non exposé dans l'UI | Aucun écran `/admin/administrateurs` ni `/admin/profil` dans `aidevsprint` |
+| `/admin/connexion` ([`page.tsx`](file:///c:/projets/les_ultra_dev/aidevclassroom/aidev_front/src/app/admin/connexion/page.tsx)) | Opérationnel | Formulaire e-mail/mot de passe connecté à la Server Action de connexion |
+| Bouton Déconnexion dans [`layout.tsx`](file:///c:/projets/les_ultra_dev/aidevclassroom/aidev_front/src/app/admin/(panneau)/layout.tsx) | Opérationnel | Formulaire POST déclenchant l'action `deconnexion` (suppression du cookie) |
+| Gestion admins & changement de mot de passe | Non exposé dans l'UI | Aucun écran `/admin/administrateurs` ni `/admin/profil` dans `aidev_front` |
 
 ---
 

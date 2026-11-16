@@ -1,6 +1,6 @@
 # PRD 04 - Paiements et Paystack
 
-**Modules couverts :** `aidev_api/src/payments` (`PaymentsController`, `PaystackWebhookController`, `PaymentsService`, `PaystackService`, `PaymentAccessGuard`, `balance.util.ts`) | `aidevsprint/src/lib/paiement.ts`, `aidevsprint/src/components/inscription/ParcoursPaiement.tsx`, `aidevsprint/src/components/paiement/RetourPaiement.tsx`, `aidevsprint/src/app/paiement/retour/page.tsx`, `aidevsprint/src/app/admin/(panneau)/paiements/page.tsx`
+**Modules couverts :** `aidev_api/src/payments` (`PaymentsController`, `PaystackWebhookController`, `PaymentsService`, `PaystackService`, `PaymentAccessGuard`, `balance.util.ts`) | `aidev_front/src/lib/paiement.ts`, `aidev_front/src/components/inscription/ParcoursPaiement.tsx`, `aidev_front/src/components/paiement/RetourPaiement.tsx`, `aidev_front/src/app/paiement/retour/page.tsx`, `aidev_front/src/app/admin/(panneau)/paiements/page.tsx`
 
 ---
 
@@ -85,7 +85,7 @@ stateDiagram-v2
 
 - **RG-PAY-05 (Vérification idempotente & anti-tampering)** : `GET /payments/:reference/verify` (`PaymentAccessGuard` : JWT `ADMIN` ou `trackingToken` de l'inscription) retourne immédiatement si déjà `SUCCESS`. Un `FAILED` de moins de `PAYSTACK_FAILED_SHORT_CIRCUIT_MINUTES` (`15` min) est court-circuité. Sinon, `verifyTransaction()` vérifie que Paystack retourne `status = 'success'`, la même `reference`, le bon montant (`fromProviderAmount(amount) === payment.amountXof`) et la bonne devise (`XOF`), avant de passer à `SUCCESS` et de mémoriser `paidAt` + `sanitizeProviderPayload()` (sinon `FAILED` + `422 PAYMENT_VERIFICATION_MISMATCH`).
 - **RG-PAY-06 (Webhook HMAC-SHA512)** : `POST /payments/webhook/paystack` vérifie `x-paystack-signature` sur le `rawBody` Express via `timingSafeEqual` et `PAYSTACK_SECRET_KEY` (sinon `400 INVALID_WEBHOOK_SIGNATURE`). Seul l'événement `charge.success` déclenche `verify()`.
-- **RG-PAY-07 (Sécurité redirection navigateur)** : `adressePaiementValide()` dans `aidevsprint/src/lib/paiement.ts` refuse toute redirection hors HTTPS sur les domaines `paystack.com` / `paystack.co`.
+- **RG-PAY-07 (Sécurité redirection navigateur)** : `adressePaiementValide()` dans `aidev_front/src/lib/paiement.ts` refuse toute redirection hors HTTPS sur les domaines `paystack.com` / `paystack.co`.
 
 ---
 
@@ -102,7 +102,7 @@ stateDiagram-v2
 | `GET` | `/admin/payments/:id` | JWT `ADMIN` | Fiche détaillée d'un paiement |
 | `POST` | `/admin/payments/:id/recheck` | JWT `ADMIN` | Relance `verify()` pour tout paiement ciblé |
 
-### 5.2 Écrans Frontend (`aidevsprint`)
+### 5.2 Écrans Frontend (`aidev_front`)
 
 | Composant / Route | Description |
 |---|---|
