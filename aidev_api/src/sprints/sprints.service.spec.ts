@@ -187,4 +187,42 @@ describe('SprintsService (CRUD + regles)', () => {
       response: expect.objectContaining({ code: 'DUO_MINIMUM_EXCEEDS_PRICE' }),
     });
   });
+
+  it('persiste ville, lieu, format, niveau et normalise les modules', async () => {
+    const prisma = makePrisma({
+      id: 1,
+      status: 'ACTIVE',
+      priceXof: 50000,
+      minimumPaymentXof: 5000,
+      startAt: new Date(dto.startAt),
+      endAt: new Date(dto.endAt),
+    }) as unknown as {
+      sprint: { create: jest.Mock; update: jest.Mock };
+    };
+    const svc = new SprintsService(prisma as never);
+    const created = await svc.create({
+      ...dto,
+      slug: 'sprint-dynamique',
+      city: '  Abidjan  ',
+      location: '  Plateau  ',
+      format: ' 2 jours ',
+      level: ' Intermediaire ',
+      modules: ['  Design  ', '  ', 'Deploiement'],
+    });
+    expect(created).toMatchObject({
+      city: 'Abidjan',
+      location: 'Plateau',
+      format: '2 jours',
+      level: 'Intermediaire',
+      modules: ['Design', 'Deploiement'],
+    });
+
+    const updated = await svc.update(1, {
+      city: '',
+      modules: [],
+    });
+    expect(updated).toMatchObject({
+      city: null,
+    });
+  });
 });

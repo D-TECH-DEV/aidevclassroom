@@ -11,6 +11,7 @@ import { EnrollmentsModule } from './enrollments/enrollments.module';
 import { HealthModule } from './health/health.module';
 import { PaymentsModule } from './payments/payments.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { SiteContentModule } from './site-content/site-content.module';
 import { SprintsModule } from './sprints/sprints.module';
 import { StudentsModule } from './students/students.module';
 
@@ -22,6 +23,7 @@ import { StudentsModule } from './students/students.module';
     AuthModule,
     AdminsModule,
     SprintsModule,
+    SiteContentModule,
     StudentsModule,
     EnrollmentsModule,
     PaymentsModule,

@@ -65,21 +65,26 @@ model Student {
 }
 
 model Sprint {
-  id                Int          @id @default(autoincrement())
-  name              String       @db.VarChar(150)
-  slug              String       @unique @db.VarChar(190)
-  description       String?      @db.Text
-  priceXof          Int          @map("price_xof")
-  minimumPaymentXof Int          @map("minimum_payment_xof")
-  duoPriceXof       Int?         @map("duo_price_xof")
-  duoMinimumPaymentXof Int?      @map("duo_minimum_payment_xof")
-  startAt           DateTime     @map("start_at")
-  endAt             DateTime     @map("end_at")
-  capacity          Int?
-  status            SprintStatus @default(DRAFT)
-  createdAt         DateTime     @default(now()) @map("created_at")
-  updatedAt         DateTime     @updatedAt @map("updated_at")
-  enrollments       Enrollment[]
+  id                   Int          @id @default(autoincrement())
+  name                 String       @db.VarChar(150)
+  slug                 String       @unique @db.VarChar(190)
+  description          String?      @db.Text
+  priceXof             Int          @map("price_xof")
+  minimumPaymentXof    Int          @map("minimum_payment_xof")
+  duoPriceXof          Int?         @map("duo_price_xof")
+  duoMinimumPaymentXof Int?         @map("duo_minimum_payment_xof")
+  startAt              DateTime     @map("start_at")
+  endAt                DateTime     @map("end_at")
+  capacity             Int?
+  city                 String?      @db.VarChar(100)
+  location             String?      @db.VarChar(255)
+  format               String?      @db.VarChar(120)
+  level                String?      @db.VarChar(120)
+  modules              Json?
+  status               SprintStatus @default(DRAFT)
+  createdAt            DateTime     @default(now()) @map("created_at")
+  updatedAt            DateTime     @updatedAt @map("updated_at")
+  enrollments          Enrollment[]
 
   @@index([status])
   @@map("sprints")
@@ -129,4 +134,45 @@ model Payment {
   @@index([createdAt])
   @@index([providerReference])
   @@map("payments")
+}
+
+
+model SiteSetting {
+  id              Int      @id @default(1)
+  whatsappDisplay String   @map("whatsapp_display") @db.VarChar(30)
+  whatsappHref    String   @map("whatsapp_href") @db.VarChar(255)
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("site_settings")
+}
+
+model Trainer {
+  id           Int      @id @default(autoincrement())
+  firstName    String   @map("first_name") @db.VarChar(80)
+  lastName     String   @map("last_name") @db.VarChar(120)
+  role         String   @db.VarChar(160)
+  photoPath    String?  @map("photo_path") @db.VarChar(255)
+  badgePath    String?  @map("badge_path") @db.VarChar(255)
+  bio          String   @db.Text
+  githubUrl    String?  @map("github_url") @db.VarChar(255)
+  linkedinUrl  String?  @map("linkedin_url") @db.VarChar(255)
+  portfolioUrl String?  @map("portfolio_url") @db.VarChar(255)
+  sortOrder    Int      @default(0) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([sortOrder])
+  @@map("trainers")
+}
+
+model FaqItem {
+  id        Int      @id @default(autoincrement())
+  question  String   @db.VarChar(255)
+  answer    String   @db.Text
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([sortOrder])
+  @@map("faqs")
 }

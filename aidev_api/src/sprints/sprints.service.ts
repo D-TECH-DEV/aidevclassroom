@@ -49,6 +49,20 @@ export class SprintsService {
     }
   }
 
+  private normalizeOptionalText(value?: string | null): string | null {
+    const trimmed = value?.trim();
+    return trimmed ? trimmed : null;
+  }
+
+  private normalizeModules(modules?: string[] | null): string[] | null {
+    if (!modules) return null;
+    const cleaned = modules
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0)
+      .slice(0, 8);
+    return cleaned.length > 0 ? cleaned : null;
+  }
+
   async create(data: {
     name: string;
     slug: string;
@@ -60,6 +74,11 @@ export class SprintsService {
     startAt: string;
     endAt: string;
     capacity?: number;
+    city?: string;
+    location?: string;
+    format?: string;
+    level?: string;
+    modules?: string[];
     status?: SprintStatus;
   }) {
     this.checkAmounts(
@@ -87,6 +106,11 @@ export class SprintsService {
           startAt: new Date(data.startAt),
           endAt: new Date(data.endAt),
           capacity: data.capacity ?? null,
+          city: this.normalizeOptionalText(data.city),
+          location: this.normalizeOptionalText(data.location),
+          format: this.normalizeOptionalText(data.format),
+          level: this.normalizeOptionalText(data.level),
+          modules: this.normalizeModules(data.modules) ?? Prisma.JsonNull,
           status: data.status ?? 'DRAFT',
         },
       });
@@ -269,6 +293,11 @@ export class SprintsService {
       startAt: string;
       endAt: string;
       capacity: number | null;
+      city: string | null;
+      location: string | null;
+      format: string | null;
+      level: string | null;
+      modules: string[] | null;
     }>,
   ) {
     const sprint = await this.detail(id);
@@ -312,6 +341,23 @@ export class SprintsService {
         ...(data.startAt !== undefined ? { startAt } : {}),
         ...(data.endAt !== undefined ? { endAt } : {}),
         ...(data.capacity !== undefined ? { capacity: data.capacity } : {}),
+        ...(data.city !== undefined
+          ? { city: this.normalizeOptionalText(data.city) }
+          : {}),
+        ...(data.location !== undefined
+          ? { location: this.normalizeOptionalText(data.location) }
+          : {}),
+        ...(data.format !== undefined
+          ? { format: this.normalizeOptionalText(data.format) }
+          : {}),
+        ...(data.level !== undefined
+          ? { level: this.normalizeOptionalText(data.level) }
+          : {}),
+        ...(data.modules !== undefined
+          ? {
+              modules: this.normalizeModules(data.modules) ?? Prisma.JsonNull,
+            }
+          : {}),
       },
     });
   }
