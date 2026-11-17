@@ -7,25 +7,25 @@ import {
   sessionPerdue,
   traduitAdmin,
 } from "@/lib/admin/api";
-import { Alerte, Surtitre, TitrePage } from "@/components/admin/Briques";
+import { Alerte, EnTetePage } from "@/components/admin/Briques";
 import { FormulaireContenu } from "@/components/admin/FormulaireContenu";
 
 export default async function PageContenuAdmin() {
   return (
-    <div className="flex flex-col gap-8">
-      <div>
-        <Surtitre>Éditorial</Surtitre>
-        <TitrePage>Contenu vitrine</TitrePage>
-      </div>
-
-      <Suspense
-        fallback={
+    <Suspense
+      fallback={
+        <div className="flex flex-col gap-6">
+          <EnTetePage
+            surtitre="Éditorial"
+            titre="Contenu vitrine"
+            description="Contact WhatsApp, profils des formateurs et questions fréquentes."
+          />
           <p className="font-mono text-small text-fg/50">Chargement…</p>
-        }
-      >
-        <ContenuCharge />
-      </Suspense>
-    </div>
+        </div>
+      }
+    >
+      <ContenuCharge />
+    </Suspense>
   );
 }
 
@@ -36,6 +36,15 @@ async function ContenuCharge() {
     return <FormulaireContenu initial={donnees} />;
   } catch (cause) {
     if (sessionPerdue(cause)) redirect("/admin/connexion");
-    return <Alerte>{traduitAdmin(cause)}</Alerte>;
+    return (
+      <div className="flex flex-col gap-6">
+        <EnTetePage
+          surtitre="Éditorial"
+          titre="Contenu vitrine"
+          description="Contact WhatsApp, profils des formateurs et questions fréquentes."
+        />
+        <Alerte>{traduitAdmin(cause)}</Alerte>
+      </div>
+    );
   }
 }

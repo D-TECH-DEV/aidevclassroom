@@ -3,24 +3,29 @@
 import { useEffect, useState } from "react";
 
 import { ErreurApi } from "@/lib/api";
+import { ChampTelephone } from "@/components/inscription/ChampTelephone";
+import { normaliseTelephone } from "@/components/inscription/FormulaireInscription";
+import { useOuvrirInscription } from "@/components/inscription/ModaleInscription";
+import { CtaButton } from "@/components/ui/CtaButton";
 import {
   ParcoursPaiement,
   type DossierAPayer,
 } from "@/components/inscription/ParcoursPaiement";
 import {
   adressePaiementValide,
-  CHARGE_DIRECTE_ACTIVE,
-  derniereCharge,
   dossiersLocaux,
   lancePaiement,
+  ouvrePopupPaystack,
   rangeTrace,
-  retrouveDossiersParEmail,
+  retrouveDossiersParContact,
   SECOURS_WHATSAPP,
   statutInscription,
   traduitPaiement,
+  verifiePaiement,
   type DossierLocal,
   type DossierSuivi,
 } from "@/lib/paiement";
+import { notifyInscriptionMaj } from "@/lib/usePlacesSprint";
 
 /**
  * « Reprendre mon paiement », `/paiement/reprendre`.
@@ -76,14 +81,19 @@ function Texte({ children }: { children: React.ReactNode }) {
   return <p className="text-body text-fg/70">{children}</p>;
 }
 
-export function ReprendrePaiement() {
+export function ReprendrePaiement({ onFermer }: { onFermer?: () => void } = {}) {
+  const ouvreInscription = useOuvrirInscription();
   const [etat, setEtat] = useState<Etat>({ phase: "recherche" });
+  const [dossierAnnuleDetecte, setDossierAnnuleDetecte] = useState(false);
   // Un paiement en cours par dossier : deux lignes n'attendent jamais
   // ensemble, chacune porte son propre état.
   const [enCours, setEnCours] = useState<Record<number, boolean>>({});
   const [erreurs, setErreurs] = useState<Record<number, string>>({});
-  // Recherche par e-mail : pour un autre appareil que celui d'inscription.
+  // Recherche par e-mail ou téléphone : pour un autre appareil ou un oubli d'e-mail.
+  const [modeRecherche, setModeRecherche] = useState<"email" | "telephone">("email");
   const [email, setEmail] = useState("");
+  const [indicatifTel, setIndicatifTel] = useState("+225");
+  const [telephone, setTelephone] = useState("");
   const [rechercheEmail, setRechercheEmail] = useState(false);
   const [erreurEmail, setErreurEmail] = useState<string | null>(null);
   const [retrouves, setRetrouves] = useState<number | null>(null);
@@ -118,7 +128,11 @@ export function ReprendrePaiement() {
         }
       }),
     );
-    return { phase: "liste", dossiers: affiches };
+    const actifs = affiches.filter((d) => d.suivi?.status !== "CANCELLED");
+    const aUnAnnule = affiches.some((d) => d.suivi?.status === "CANCELLED");
+    setDossierAnnuleDetecte(aUnAnnule);
+    if (actifs.length === 0) return { phase: "vide" };
+    return { phase: "liste", dossiers: actifs };
   }
 
   // Chargement direct à l'ouverture : aucun e-mail à saisir, les
@@ -138,20 +152,37 @@ export function ReprendrePaiement() {
   async function recupereParEmail(evenement: React.FormEvent) {
     evenement.preventDefault();
     if (rechercheEmail) return;
-    const propre = email.trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(propre)) {
-      setErreurEmail("Cette adresse e-mail n'est pas valide.");
-      return;
+
+    let payload: { email?: string; phone?: string };
+    if (modeRecherche === "email") {
+      const propre = email.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(propre)) {
+        setErreurEmail("Cette adresse e-mail n'est pas valide.");
+        return;
+      }
+      payload = { email: propre };
+    } else {
+      const normalise = normaliseTelephone(`${indicatifTel} ${telephone}`);
+      if (!normalise) {
+        setErreurEmail(
+          telephone.trim()
+            ? "Numéro incomplet. Dix chiffres, ou l'indicatif du pays."
+            : "Saisis ton numéro de téléphone.",
+        );
+        return;
+      }
+      payload = { phone: normalise };
     }
+
     setRechercheEmail(true);
     setErreurEmail(null);
     setRetrouves(null);
     try {
-      const dossiers = await retrouveDossiersParEmail(propre);
+      const dossiers = await retrouveDossiersParContact(payload);
       setRetrouves(dossiers.length);
       if (dossiers.length === 0) {
         setErreurEmail(
-          "Aucun dossier pour cette adresse. Vérifie l'e-mail de ton inscription.",
+          "Aucun dossier actif trouvé. Si ton inscription a été annulée, reprends une nouvelle inscription.",
         );
       }
       setEtat(await charge());
@@ -169,30 +200,6 @@ export function ReprendrePaiement() {
       reste <= 0 ||
       enCours[dossier.local.idInscription]
     ) {
-      return;
-    }
-
-    // Parcours direct (charge mobile money, sans redirection) : le même
-    // que depuis l'inscription, avec le seul montant possible (le reste).
-    // Le numéro déjà utilisé est pré-rempli quand il est connu ici.
-    if (CHARGE_DIRECTE_ACTIVE && dossier.suivi) {
-      const suivi = dossier.suivi;
-      const binome = [suivi.partnerFirstName, suivi.partnerLastName]
-        .filter(Boolean)
-        .join(" ");
-      setChargeDossier({
-        idInscription: dossier.local.idInscription,
-        jeton: dossier.local.jeton,
-        prenom: dossier.local.prenom ?? "",
-        email: dossier.local.email,
-        totalXof: suivi.totalAmountXof,
-        minimumXof: suivi.sprint?.minimumPaymentXof ?? reste,
-        forfait: suivi.plan,
-        binome: binome ? binome : undefined,
-        resteXof: reste,
-        telephonePrefill:
-          derniereCharge(dossier.local.idInscription)?.trace.telephone,
-      });
       return;
     }
 
@@ -224,7 +231,50 @@ export function ReprendrePaiement() {
         email: dossier.local.email,
       });
 
-      window.location.href = lance.authorizationUrl;
+      await ouvrePopupPaystack(lance.accessCode, lance.authorizationUrl, {
+        onSuccess: (ref) => {
+          const refFinale = ref || lance.reference;
+          void verifiePaiement(refFinale, dossier.local.jeton)
+            .then(async () => {
+              notifyInscriptionMaj();
+              setEtat(await charge());
+            })
+            .catch((cause) => {
+              setErreurs((v) => ({
+                ...v,
+                [dossier.local.idInscription]: traduitPaiement(cause),
+              }));
+            })
+            .finally(() => {
+              setEnCours((v) => ({
+                ...v,
+                [dossier.local.idInscription]: false,
+              }));
+            });
+        },
+        onCancel: () => {
+          setEnCours((v) => ({
+            ...v,
+            [dossier.local.idInscription]: false,
+          }));
+          setErreurs((v) => ({
+            ...v,
+            [dossier.local.idInscription]:
+              "Paiement annulé. Tu peux réessayer quand tu es prêt.",
+          }));
+        },
+        onError: () => {
+          setEnCours((v) => ({
+            ...v,
+            [dossier.local.idInscription]: false,
+          }));
+          setErreurs((v) => ({
+            ...v,
+            [dossier.local.idInscription]:
+              "Le paiement n'a pas pu aboutir. Réessaie.",
+          }));
+        },
+      });
     } catch (cause) {
       setEnCours((v) => ({ ...v, [dossier.local.idInscription]: false }));
       setErreurs((v) => ({
@@ -260,9 +310,7 @@ export function ReprendrePaiement() {
     );
   }
 
-  // Le formulaire e-mail : la porte d'entrée depuis un autre appareil.
-  // Même carte que le reste, pour ne pas faire deux pages en une.
-  function BlocEmail() {
+  function BlocEmail({ titre, description }: { titre: string; description: string }) {
     return (
       <form
         onSubmit={(e) => void recupereParEmail(e)}
@@ -271,40 +319,113 @@ export function ReprendrePaiement() {
                    text-left"
       >
         <p className="text-h3 font-bold leading-tight tracking-tight">
-          Un autre téléphone ?
+          {titre}
         </p>
         <p className="mt-2 text-body text-fg/70">
-          Saisis l&apos;e-mail de ton inscription : on retrouve ton reste à
-          payer ici même, et tu paies comme avant.
+          {description}
         </p>
-        <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="ton@email.com"
-            autoComplete="email"
-            aria-label="E-mail de ton inscription"
-            className="w-full rounded-field border border-fg/20 bg-bg
-                       px-4 py-3 text-body text-fg outline-none
-                       placeholder:text-fg/35 focus-visible:border-accent/60"
-          />
+        <p className="mt-3 rounded-field border border-[#0B63F6]/30 bg-[#0B63F6]/10 px-3.5 py-2.5 text-xs leading-relaxed text-fg/85">
+          <strong>Note :</strong> cette option concerne uniquement les personnes
+          ayant déjà effectué un paiement partiel pour leur adhésion.
+        </p>
+
+        <div
+          role="tablist"
+          aria-label="Méthode de recherche"
+          className="mt-4 grid grid-cols-2 gap-2 rounded-field border border-fg/15 bg-bg p-1"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={modeRecherche === "email"}
+            onClick={() => {
+              setModeRecherche("email");
+              setErreurEmail(null);
+            }}
+            className={`rounded-field py-2 text-small font-semibold transition-colors ${
+              modeRecherche === "email"
+                ? "bg-[#0B63F6] text-fg"
+                : "text-fg/65 hoverable:hover:text-fg"
+            }`}
+          >
+            Par e-mail
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={modeRecherche === "telephone"}
+            onClick={() => {
+              setModeRecherche("telephone");
+              setErreurEmail(null);
+            }}
+            className={`rounded-field py-2 text-small font-semibold transition-colors ${
+              modeRecherche === "telephone"
+                ? "bg-[#0B63F6] text-fg"
+                : "text-fg/65 hoverable:hover:text-fg"
+            }`}
+          >
+            Par téléphone
+          </button>
+        </div>
+
+        <div className="mt-4 flex flex-col gap-3">
+          {modeRecherche === "email" ? (
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="ton@email.com"
+              autoComplete="email"
+              aria-label="E-mail de ton inscription"
+              className="w-full rounded-field border border-fg/20 bg-bg
+                         px-4 py-3 text-body text-fg outline-none
+                         placeholder:text-fg/35 focus-visible:border-accent/60"
+            />
+          ) : (
+            <ChampTelephone
+              nom="rechercheTelephone"
+              etiquette="Numéro WhatsApp utilisé"
+              indicatif={indicatifTel}
+              onChangeIndicatif={setIndicatifTel}
+              valeur={telephone}
+              onChange={setTelephone}
+              placeholder="07 04 92 10 80"
+            />
+          )}
           <button
             type="submit"
             disabled={rechercheEmail}
-            className="inline-flex shrink-0 items-center justify-center
+            className="inline-flex w-full shrink-0 items-center justify-center
                        rounded-pill border-2 border-cta px-8 py-3
                        text-body font-bold transition-transform
                        duration-[120ms] active:scale-[0.96]
                        disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {rechercheEmail ? "Recherche…" : "Retrouver"}
+            {rechercheEmail ? "Recherche…" : "Retrouver mon dossier"}
           </button>
         </div>
         {erreurEmail ? (
-          <p role="alert" className="mt-3 text-small font-medium text-fg">
-            {erreurEmail}
-          </p>
+          <div role="alert" className="mt-3 space-y-3">
+            <p className="text-small font-medium text-fg">{erreurEmail}</p>
+            {ouvreInscription ? (
+              <CtaButton
+                type="button"
+                variante="vert"
+                taille="sm"
+                pleineLargeur
+                onClick={() => {
+                  onFermer?.();
+                  ouvreInscription();
+                }}
+              >
+                Reprendre mon inscription
+              </CtaButton>
+            ) : (
+              <CtaButton href="/" variante="vert" taille="sm" pleineLargeur>
+                Reprendre mon inscription
+              </CtaButton>
+            )}
+          </div>
         ) : null}
         {retrouves !== null && !erreurEmail ? (
           <p role="status" className="mt-3 text-small text-fg/70">
@@ -313,26 +434,48 @@ export function ReprendrePaiement() {
               : `${retrouves} dossier${retrouves > 1 ? "s" : ""} retrouvé${retrouves > 1 ? "s" : ""} : paie juste en dessous.`}
           </p>
         ) : null}
+        <p className="mt-4 text-xs text-fg/45">
+          Besoin d&apos;aide ? {SECOURS_WHATSAPP}
+        </p>
       </form>
     );
   }
 
   if (etat.phase === "vide") {
     return (
-      <div className="flex flex-col gap-[clamp(1rem,2.5svh,1.5rem)]">
-        <Cadre>
-          <Titre>Aucun dossier sur cet appareil.</Titre>
-          <Texte>
-            Les inscriptions faites ici s&apos;y retrouvent toutes seules —
-            mais la clé d&apos;un dossier ne voyage pas : navigation privée,
-            autre téléphone, stockage vidé, et ce navigateur ne connaît rien.
-          </Texte>
-          <Texte>
-            Pas de panique : ton inscription est gardée côté serveur.{" "}
-            {SECOURS_WHATSAPP}
-          </Texte>
-        </Cadre>
-        <BlocEmail />
+      <div className="flex flex-col gap-4">
+        {dossierAnnuleDetecte ? (
+          <div className="space-y-3 rounded-card border border-amber-400/35 bg-amber-500/10 p-4 text-left">
+            <p className="text-body font-semibold text-fg">
+              Ton précédent dossier a été annulé.
+            </p>
+            <p className="text-small text-fg/75">
+              Pour participer au sprint, tu dois reprendre une nouvelle inscription.
+            </p>
+            {ouvreInscription ? (
+              <CtaButton
+                type="button"
+                variante="vert"
+                taille="sm"
+                pleineLargeur
+                onClick={() => {
+                  onFermer?.();
+                  ouvreInscription();
+                }}
+              >
+                Reprendre mon inscription
+              </CtaButton>
+            ) : (
+              <CtaButton href="/" variante="vert" taille="sm" pleineLargeur>
+                Reprendre mon inscription
+              </CtaButton>
+            )}
+          </div>
+        ) : null}
+        <BlocEmail
+          titre="Retrouver mon inscription"
+          description="Saisis l'adresse e-mail ou le numéro de téléphone utilisé lors de ton inscription pour compléter ton paiement."
+        />
       </div>
     );
   }
@@ -349,7 +492,10 @@ export function ReprendrePaiement() {
           onPaie={() => void paieReste(dossier)}
         />
       ))}
-      <BlocEmail />
+      <BlocEmail
+        titre="Un autre dossier ?"
+        description="Saisis l'e-mail d'une autre inscription pour la retrouver ici."
+      />
     </div>
   );
 }
@@ -386,6 +532,11 @@ function LigneDossier({
 
   const reste = suivi.remainingAmountXof ?? 0;
   const solde = reste <= 0;
+  const paye = suivi.totalPaidXof ?? Math.max(0, suivi.totalAmountXof - reste);
+  const pourcentage =
+    suivi.totalAmountXof > 0
+      ? Math.min(100, Math.round((paye / suivi.totalAmountXof) * 100))
+      : 0;
 
   return (
     <div
@@ -406,9 +557,18 @@ function LigneDossier({
           </p>
         ) : null}
         <p className="font-mono text-small text-fg/50">
-          {suivi.totalPaidXof?.toLocaleString("fr-FR") ?? 0} /{" "}
-          {suivi.totalAmountXof.toLocaleString("fr-FR")} FCFA payés
+          {paye.toLocaleString("fr-FR")} /{" "}
+          {suivi.totalAmountXof.toLocaleString("fr-FR")} FCFA payés ({pourcentage} %)
         </p>
+      </div>
+
+      <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-fg/10">
+        <div
+          className={`h-full transition-all duration-300 ${
+            solde ? "bg-[#2EE66B]" : "bg-[#0B63F6]"
+          }`}
+          style={{ width: `${pourcentage}%` }}
+        />
       </div>
 
       {suivi.status === "CANCELLED" ? (
@@ -425,6 +585,9 @@ function LigneDossier({
           <p className="mt-3 text-body">
             Reste à payer :{" "}
             <strong>{reste.toLocaleString("fr-FR")} FCFA</strong>
+          </p>
+          <p className="mt-1 text-small text-fg/60">
+            Statut : en attente de solde (place confirmée dès 100 % payés).
           </p>
           <button
             type="button"

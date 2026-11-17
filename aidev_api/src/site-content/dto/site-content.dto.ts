@@ -2,6 +2,7 @@ import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsEmail,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -131,6 +132,12 @@ export class UpdateSiteContentDto {
   )
   @MaxLength(255)
   whatsappHref!: string;
+
+  @Transform(trimToNull)
+  @IsOptional()
+  @IsEmail({}, { message: 'contactEmail doit etre une adresse e-mail valide.' })
+  @MaxLength(180)
+  contactEmail?: string | null;
 
   @IsOptional()
   @IsArray()

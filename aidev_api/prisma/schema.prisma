@@ -99,15 +99,16 @@ model Enrollment {
   partnerFirstName String?          @map("partner_first_name") @db.VarChar(100)
   partnerLastName  String?          @map("partner_last_name") @db.VarChar(100)
   partnerPhone     String?          @map("partner_phone") @db.VarChar(30)
-  status           EnrollmentStatus @default(PENDING)
-  trackingTokenHash String          @map("tracking_token_hash") @db.VarChar(255)
-  createdAt        DateTime         @default(now()) @map("created_at")
+  status                 EnrollmentStatus @default(PENDING)
+  trackingTokenHash      String           @map("tracking_token_hash") @db.VarChar(255)
+  partialTermsAcceptedAt DateTime?        @map("partial_terms_accepted_at")
+  createdAt              DateTime         @default(now()) @map("created_at")
   updatedAt        DateTime         @updatedAt @map("updated_at")
   student          Student          @relation(fields: [studentId], references: [id], onDelete: Restrict)
   sprint           Sprint           @relation(fields: [sprintId], references: [id], onDelete: Restrict)
   payments         Payment[]
 
-  @@unique([studentId, sprintId])
+  @@index([studentId, sprintId])
   @@index([studentId])
   @@index([sprintId])
   @@index([status])
@@ -141,6 +142,7 @@ model SiteSetting {
   id              Int      @id @default(1)
   whatsappDisplay String   @map("whatsapp_display") @db.VarChar(30)
   whatsappHref    String   @map("whatsapp_href") @db.VarChar(255)
+  contactEmail    String?  @map("contact_email") @db.VarChar(180)
   updatedAt       DateTime @updatedAt @map("updated_at")
 
   @@map("site_settings")

@@ -3,6 +3,7 @@ import 'dotenv/config';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { seedEnrollmentsAndPayments } from './seed-enrollments';
 
 const url = process.env.DATABASE_URL;
 if (!url)
@@ -172,6 +173,8 @@ async function main(): Promise<void> {
     });
   }
   console.log('Contenu editorial par defaut pret.');
+
+  await seedEnrollmentsAndPayments(prisma);
 }
 
 void main()

@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { BoutonReserver } from "@/components/inscription/BoutonReserver";
 import { EtiquetteSection } from "@/components/ui/EtiquetteSection";
-import { A_DETERMINER, MODULES_DEFAUT, type Edition } from "@/lib/edition";
+import { A_DETERMINER, type Edition } from "@/lib/edition";
 import { Reveal } from "@/components/motion/Reveal";
 
 /**
@@ -56,20 +56,60 @@ export function Session({
   whatsappAffiche?: string;
   whatsappLien?: string;
 }) {
-  const etapes = edition?.modules?.length ? edition.modules : MODULES_DEFAUT;
-  const date = edition
-    ? new Intl.DateTimeFormat("fr-FR", {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      }).format(new Date(edition.dateDebut))
-    : A_DETERMINER;
+  if (!edition) {
+    return (
+      <section
+        id="session"
+        className="relative isolate overflow-hidden py-[clamp(4rem,12svh,9rem)]"
+      >
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 -z-10"
+          style={{
+            backgroundImage: [
+              "radial-gradient(70% 90% at 8% 25%, color-mix(in oklab, var(--color-glow-green) 42%, transparent) 0%, transparent 60%)",
+              "radial-gradient(60% 80% at 95% 95%, color-mix(in oklab, var(--color-glow-blue) 65%, transparent) 0%, transparent 60%)",
+            ].join(", "),
+          }}
+        />
+        <Reveal className="shell">
+          <div className="max-w-[54ch] rounded-card border border-fg/15 bg-bg/60 p-[clamp(1.5rem,3vw,2.5rem)]">
+            <EtiquetteSection>Prochaine session</EtiquetteSection>
+            <h2 className="mt-[clamp(1rem,3svh,1.75rem)] text-h1 font-bold leading-[1.05] tracking-tighter">
+              Aucune session active pour le moment.
+            </h2>
+            <p className="mt-[clamp(1rem,2.5svh,1.5rem)] text-body text-fg/70">
+              Les prochaines dates, le lieu et le programme détaillé seront
+              publiés ici dès l&apos;ouverture du prochain sprint.
+            </p>
+            <div className="mt-[clamp(1.5rem,4svh,2.25rem)] flex flex-wrap items-center gap-4">
+              <Link
+                href={whatsappLien}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-small text-fg/75 underline decoration-fg/30
+                           underline-offset-4 transition-colors hover:text-accent"
+              >
+                Nous contacter sur WhatsApp ({whatsappAffiche})
+              </Link>
+            </div>
+          </div>
+        </Reveal>
+      </section>
+    );
+  }
 
-  const prix = edition
-    ? edition.prixDuoFCFA != null
+  const etapes = edition.modules;
+  const date = new Intl.DateTimeFormat("fr-FR", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new Date(edition.dateDebut));
+
+  const prix =
+    edition.prixDuoFCFA != null
       ? `Solo ${edition.prixFCFA.toLocaleString("fr-FR")} · Duo ${edition.prixDuoFCFA.toLocaleString("fr-FR")} FCFA`
-      : `${edition.prixFCFA.toLocaleString("fr-FR")} FCFA`
-    : A_DETERMINER;
+      : `${edition.prixFCFA.toLocaleString("fr-FR")} FCFA`;
 
   return (
     <section
@@ -93,53 +133,54 @@ export function Session({
         <div className="grid gap-[clamp(2.5rem,6svh,4rem)] lg:grid-cols-2 lg:items-center lg:gap-[clamp(2rem,5vw,5rem)]">
           <div>
             <EtiquetteSection>
-              {edition?.nom ?? A_DETERMINER} · {edition?.format ?? A_DETERMINER}
+              {edition.format !== A_DETERMINER
+                ? edition.format
+                : "Session ouverte"}
             </EtiquetteSection>
 
-            <h2 className="mt-[clamp(1rem,3svh,2rem)] max-w-[14ch] text-h1 font-bold leading-[1.02] tracking-tighter">
-              Repars avec ton <em>portfolio</em>{" "}
-              <span
-                className="bg-clip-text text-transparent"
-                style={{ backgroundImage: "var(--gradient-signature)" }}
-              >
-                en ligne
-              </span>
-              .
+            <h2 className="mt-[clamp(1rem,3svh,2rem)] max-w-[16ch] text-h1 font-bold leading-[1.02] tracking-tighter">
+              {edition.nom}
             </h2>
 
-            <p className="mt-[clamp(1rem,2.5svh,1.75rem)] max-w-[52ch] text-body text-fg/70">
-              {edition?.description ??
-                "En une journée, tu conçois, codes et déploies ton propre site avec l'IA, en suivant notre méthode de bout en bout."}
-            </p>
+            {edition.description ? (
+              <p className="mt-[clamp(1rem,2.5svh,1.75rem)] max-w-[52ch] text-body text-fg/70">
+                {edition.description}
+              </p>
+            ) : null}
           </div>
 
-          {/* Les étapes du programme. Une liste ordonnée : l'ordre est le propos. */}
-          <ol className="flex flex-col gap-[clamp(0.625rem,1.5svh,1rem)]">
-            {etapes.map((temps, i) => (
-              <li
-                key={`${temps}-${i}`}
-                className="flex items-center gap-[clamp(0.75rem,1.5vw,1.25rem)]
-                           rounded-pill border border-fg/15 bg-bg/40
-                           px-[clamp(0.75rem,1.5vw,1.25rem)]
-                           py-[clamp(0.625rem,1.6svh,1rem)]
-                           transition-colors duration-[200ms]
-                           ease-[var(--ease-out-strong)]
-                           hoverable:hover:border-accent/50"
-              >
-                <span
-                  aria-hidden
-                  className="grid size-[clamp(1.75rem,4svh,2.5rem)] shrink-0
-                             place-items-center rounded-pill bg-accent
-                             font-mono text-small font-bold text-on-accent"
+          {etapes.length > 0 ? (
+            <ol className="flex flex-col gap-[clamp(0.625rem,1.5svh,1rem)]">
+              {etapes.map((temps, i) => (
+                <li
+                  key={`${temps}-${i}`}
+                  className="flex items-center gap-[clamp(0.75rem,1.5vw,1.25rem)]
+                             rounded-pill border border-fg/15 bg-bg/40
+                             px-[clamp(0.75rem,1.5vw,1.25rem)]
+                             py-[clamp(0.625rem,1.6svh,1rem)]
+                             transition-colors duration-[200ms]
+                             ease-[var(--ease-out-strong)]
+                             hoverable:hover:border-accent/50"
                 >
-                  {i + 1}
-                </span>
-                <span className="text-body font-bold tracking-tight">
-                  {temps}
-                </span>
-              </li>
-            ))}
-          </ol>
+                  <span
+                    aria-hidden
+                    className="grid size-[clamp(1.75rem,4svh,2.5rem)] shrink-0
+                               place-items-center rounded-pill bg-accent
+                               font-mono text-small font-bold text-on-accent"
+                  >
+                    {i + 1}
+                  </span>
+                  <span className="text-body font-bold tracking-tight">
+                    {temps}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <div className="rounded-card border border-fg/15 bg-bg/40 p-6 font-mono text-small text-fg/60">
+              Le programme détaillé de cette session sera précisé prochainement.
+            </div>
+          )}
         </div>
 
         {/* ── La barre de faits ─────────────────────────────────────── */}
@@ -151,7 +192,11 @@ export function Session({
             <Fait etiquette="Date" valeur={date} determine={edition !== null} />
             <Fait
               etiquette="Lieu"
-              valeur={edition?.ville ?? A_DETERMINER}
+              valeur={
+                edition && edition.ville !== A_DETERMINER
+                  ? edition.ville
+                  : "À annoncer"
+              }
               precision={
                 edition && edition.lieu !== A_DETERMINER ? edition.lieu : null
               }
@@ -159,7 +204,11 @@ export function Session({
             />
             <Fait
               etiquette="Niveau"
-              valeur={edition?.niveau ?? A_DETERMINER}
+              valeur={
+                edition && edition.niveau !== A_DETERMINER
+                  ? edition.niveau
+                  : "Bases en dev"
+              }
               determine={Boolean(edition && edition.niveau !== A_DETERMINER)}
             />
             <Fait etiquette="Prix" valeur={prix} determine={edition !== null} />
@@ -179,7 +228,7 @@ export function Session({
               >
                 {edition?.quota != null
                   ? `${edition.quota} places`
-                  : A_DETERMINER}
+                  : "À confirmer"}
               </span>
             </p>
 

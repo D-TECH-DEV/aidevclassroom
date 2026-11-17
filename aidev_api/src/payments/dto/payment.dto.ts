@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsEnum,
   IsInt,
   IsOptional,
@@ -38,4 +39,9 @@ export class InitializePaymentDto {
       'Le numero mobile doit etre au format E.164 ivoirien : 225 suivi de 10 chiffres.',
   })
   phone?: string;
+
+  /** Acceptation obligatoire (« Lu et approuve ») en cas de paiement partiel. */
+  @IsOptional()
+  @IsBoolean()
+  partialTermsAccepted?: boolean;
 }

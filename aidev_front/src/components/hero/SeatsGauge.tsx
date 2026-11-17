@@ -85,17 +85,19 @@ export function SeatsGauge({
 
       <p className="font-mono text-small text-fg/70">
         {quotaConnu ? (
-          <>
-            <span className="text-fg">
-              {inscritsConnus ? inscrits : "[À DÉTERMINER]"} / {quota}
-            </span>{" "}
-            places réservées
-            {complet && <span className="text-accent"> · complet</span>}
-          </>
+          inscritsConnus ? (
+            <>
+              <span className="text-fg">
+                {inscrits} / {quota}
+              </span>{" "}
+              places réservées
+              {complet && <span className="text-accent"> · complet</span>}
+            </>
+          ) : (
+            <span className="text-fg/80">{quota} places disponibles</span>
+          )
         ) : (
-          <span className="text-fg/50">
-            Nombre de places [À DÉTERMINER]
-          </span>
+          <span className="text-fg/55">Places annoncées prochainement</span>
         )}
       </p>
     </div>

@@ -50,7 +50,7 @@ export function Methode() {
         <EtiquetteSection>la méthode</EtiquetteSection>
 
         <h2 className="mt-[clamp(1rem,3svh,2rem)] max-w-[18ch] text-h1 font-bold leading-[1.05] tracking-tighter">
-          Toi aux commandes. L&apos;IA au clavier.
+          Toi aux commandes.<br /> L&apos;IA &agrave; l&apos;ex&eacute;cution.
         </h2>
 
         <p className="mt-[clamp(1rem,2.5svh,1.75rem)] max-w-[60ch] text-body text-fg/70">

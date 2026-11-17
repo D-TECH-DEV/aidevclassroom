@@ -4,16 +4,23 @@ import { useId, useState } from "react";
 
 import { api, ErreurApi } from "@/lib/api";
 import { CtaButton } from "@/components/ui/CtaButton";
+import {
+  ChampTelephone,
+  formateNumeroSelonIndicatif,
+} from "@/components/inscription/ChampTelephone";
+import { ChoixPaiementPartiel } from "@/components/inscription/ChoixPaiementPartiel";
 import { ParcoursPaiement } from "@/components/inscription/ParcoursPaiement";
 import {
-  CHARGE_DIRECTE_ACTIVE,
   adressePaiementValide,
   dossiersLocaux,
   lancePaiement,
+  ouvrePopupPaystack,
   rangeJetonSuivi,
   rangeTrace,
   statutInscription,
   traduitPaiement,
+  verifiePaiement,
+  type PaiementVerifie,
 } from "@/lib/paiement";
 import type { Edition } from "@/lib/edition";
 import { notifyInscriptionMaj } from "@/lib/usePlacesSprint";
@@ -107,6 +114,11 @@ export function normaliseTelephone(saisi: string): string | null {
   const corps = brut.startsWith("00") ? chiffres.slice(2) : chiffres;
 
   if (international) {
+    if (corps.startsWith(INDICATIF_CI)) {
+      return corps.length === INDICATIF_CI.length + CHIFFRES_LOCAUX
+        ? `+${corps}`
+        : null;
+    }
     return /^[1-9]\d{6,17}$/.test(corps) ? `+${corps}` : null;
   }
 
@@ -117,9 +129,19 @@ export function normaliseTelephone(saisi: string): string | null {
   return null;
 }
 
+function combineTelephone(indicatif: string, numero: string): string {
+  const num = numero.trim();
+  if (!num) return "";
+  const ind = indicatif.trim();
+  if (!ind || num.startsWith("+") || num.startsWith("00")) return num;
+  return `${ind} ${num}`;
+}
+
 function verifie(
   valeurs: Record<NomChamp, string>,
   forfait: Forfait,
+  indicatifTel = "+225",
+  indicatifBinome = "+225",
 ): Erreurs {
   const erreurs: Erreurs = {};
 
@@ -130,7 +152,11 @@ function verifie(
       erreurs.binomePrenom = "Le prénom de ton binôme.";
     if (valeurs.binomeNom.trim().length < 2)
       erreurs.binomeNom = "Le nom de ton binôme.";
-    if (normaliseTelephone(valeurs.binomeTelephone) === null)
+    if (
+      normaliseTelephone(
+        combineTelephone(indicatifBinome, valeurs.binomeTelephone),
+      ) === null
+    )
       erreurs.binomeTelephone = valeurs.binomeTelephone.trim()
         ? "Numéro incomplet. Dix chiffres, ou l'indicatif du pays."
         : "Le numéro du binôme est obligatoire.";
@@ -140,7 +166,10 @@ function verifie(
     erreurs.email = "Cette adresse email n'est pas valide.";
   }
 
-  if (normaliseTelephone(valeurs.telephone) === null) {
+  if (
+    normaliseTelephone(combineTelephone(indicatifTel, valeurs.telephone)) ===
+    null
+  ) {
     erreurs.telephone = valeurs.telephone.trim()
       ? "Numéro incomplet. Dix chiffres, ou l'indicatif du pays."
       : "Le numéro est obligatoire.";
@@ -316,11 +345,25 @@ export function FormulaireInscription({
   whatsappAffiche?: string;
 }) {
   const [valeurs, setValeurs] = useState(VIDE);
+  const [indicatifTel, setIndicatifTel] = useState("+225");
+  const [indicatifBinome, setIndicatifBinome] = useState("+225");
   const [erreurs, setErreurs] = useState<Erreurs>({});
   const [etat, setEtat] = useState<Etat>("repos");
   // Le forfait choisi : solo, ou duo quand le sprint le propose.
   const duoPropose = edition.prixDuoFCFA != null;
   const [forfait, setForfait] = useState<Forfait>("SINGLE");
+  const prixActif =
+    forfait === "DUO" && edition.prixDuoFCFA != null
+      ? edition.prixDuoFCFA
+      : edition.prixFCFA;
+  const minimumActif =
+    forfait === "DUO" && edition.prixDuoFCFA != null
+      ? (edition.minimumDuoFCFA ?? edition.minimumFCFA)
+      : edition.minimumFCFA;
+  const [montantChoisi, setMontantChoisi] = useState<number>(prixActif);
+  const [conditionsPartielles, setConditionsPartielles] = useState(false);
+  const estPartielForm =
+    minimumActif < prixActif && montantChoisi < prixActif;
   const [confirmee, setConfirmee] = useState<Confirmee | null>(null);
   // « Précédent » depuis l'étape moyen du parcours : on remontre le
   // formulaire (données conservées, voir `envoie`) sans perdre le dossier.
@@ -335,7 +378,12 @@ export function FormulaireInscription({
     total: number;
   } | null>(null);
   const [paiementEnCours, setPaiementEnCours] = useState(false);
+  const [verificationEnCours, setVerificationEnCours] = useState(false);
+  const [paiementVerifie, setPaiementVerifie] =
+    useState<PaiementVerifie | null>(null);
   const [erreurPaiement, setErreurPaiement] = useState<string | null>(null);
+  const [montantRepli, setMontantRepli] = useState<number | null>(null);
+  const [conditionsRepli, setConditionsRepli] = useState(false);
   // Reprise instantanée après un « déjà inscrit » : le dossier retrouvé
   // sur cet appareil, avec son reste à payer. `ratee` = pas trouvé ici.
   const [reprise, setReprise] = useState<
@@ -345,7 +393,13 @@ export function FormulaireInscription({
   const [repriseRatee, setRepriseRatee] = useState(false);
 
   const ecrit = (champ: NomChamp) => (valeur: string) => {
-    setValeurs((v) => ({ ...v, [champ]: valeur }));
+    const valeurFormatee =
+      champ === "telephone"
+        ? formateNumeroSelonIndicatif(valeur, indicatifTel)
+        : champ === "binomeTelephone"
+          ? formateNumeroSelonIndicatif(valeur, indicatifBinome)
+          : valeur;
+    setValeurs((v) => ({ ...v, [champ]: valeurFormatee }));
     // L'erreur d'un champ disparaît dès qu'on le corrige, pas au prochain
     // envoi : garder un champ marqué pendant qu'on le retape est faux.
     setErreurs((precedentes) => {
@@ -403,7 +457,7 @@ export function FormulaireInscription({
     evenement.preventDefault();
     if (etat === "envoi") return;
 
-    const trouvees = verifie(valeurs, forfait);
+    const trouvees = verifie(valeurs, forfait, indicatifTel, indicatifBinome);
     if (Object.keys(trouvees).length > 0) {
       setErreurs(trouvees);
       return;
@@ -424,14 +478,18 @@ export function FormulaireInscription({
               ? {
                   partnerFirstName: valeurs.binomePrenom.trim(),
                   partnerLastName: valeurs.binomeNom.trim(),
-                  partnerPhone: normaliseTelephone(valeurs.binomeTelephone),
+                  partnerPhone: normaliseTelephone(
+                    combineTelephone(indicatifBinome, valeurs.binomeTelephone),
+                  ),
                 }
               : {}),
             student: {
               firstName: valeurs.prenom.trim(),
               lastName: valeurs.nom.trim(),
               email: valeurs.email.trim(),
-              phone: normaliseTelephone(valeurs.telephone),
+              phone: normaliseTelephone(
+                combineTelephone(indicatifTel, valeurs.telephone),
+              ),
             },
           }),
         },
@@ -466,8 +524,25 @@ export function FormulaireInscription({
       // paiement remontre ce formulaire pré-rempli au lieu d'une page vide.
       setRevientFormulaire(false);
       setDossierReprise(null);
+      setMontantRepli(montantChoisi);
+      setConditionsRepli(conditionsPartielles);
       setEtat("ok");
       notifyInscriptionMaj();
+
+      const montantAPayer = Math.min(
+        Math.max(montantChoisi, minimumActif),
+        enrollment.totalAmountXof,
+      );
+      void lanceEtRedirige(
+        enrollment.id,
+        trackingToken,
+        valeurs.prenom.trim(),
+        montantAPayer,
+        valeurs.email.trim().toLowerCase(),
+        montantAPayer < enrollment.totalAmountXof
+          ? conditionsPartielles
+          : undefined,
+      );
     } catch (cause) {
       setEtat("repos");
       setErreurs(
@@ -499,6 +574,7 @@ export function FormulaireInscription({
     prenom: string,
     montant: number,
     email?: string,
+    partialTermsAccepted?: boolean,
   ) {
     if (paiementEnCours) return;
 
@@ -506,7 +582,12 @@ export function FormulaireInscription({
     setErreurPaiement(null);
 
     try {
-      const lance = await lancePaiement(idInscription, montant, jeton);
+      const lance = await lancePaiement(
+        idInscription,
+        montant,
+        jeton,
+        partialTermsAccepted,
+      );
 
       if (!adressePaiementValide(lance.authorizationUrl)) {
         throw new Error(`adresse de paiement inattendue : ${lance.authorizationUrl}`);
@@ -520,14 +601,43 @@ export function FormulaireInscription({
         email,
       });
 
-      window.location.href = lance.authorizationUrl;
+      await ouvrePopupPaystack(lance.accessCode, lance.authorizationUrl, {
+        onSuccess: (ref) => {
+          const refFinale = ref || lance.reference;
+          setPaiementEnCours(false);
+          setVerificationEnCours(true);
+          void verifiePaiement(refFinale, jeton)
+            .then((verifie) => {
+              notifyInscriptionMaj();
+              setPaiementVerifie(verifie);
+            })
+            .catch((cause) => {
+              setErreurPaiement(traduitPaiement(cause));
+            })
+            .finally(() => {
+              setVerificationEnCours(false);
+            });
+        },
+        onCancel: () => {
+          setPaiementEnCours(false);
+          setErreurPaiement(
+            "Paiement annulé. Tu peux réessayer quand tu es prêt.",
+          );
+        },
+        onError: () => {
+          setPaiementEnCours(false);
+          setErreurPaiement(
+            "Le paiement n'a pas pu aboutir. Vérifie tes informations et réessaie.",
+          );
+        },
+      });
     } catch (cause) {
       setPaiementEnCours(false);
       setErreurPaiement(traduitPaiement(cause));
     }
   }
 
-  async function paie(montant: number) {
+  async function paie(montant: number, partialTermsAccepted?: boolean) {
     if (!confirmee) return;
     await lanceEtRedirige(
       confirmee.id,
@@ -535,62 +645,77 @@ export function FormulaireInscription({
       confirmee.prenom,
       montant,
       confirmee.email,
+      partialTermsAccepted,
     );
   }
 
-  // Reprise « déjà inscrit » : le même parcours, avec un seul montant
-  // possible (le reste). L'ancien parcours (redirection Paystack) reste
-  // branché sur le bouton d'origine quand le repli est actif.
-  if (dossierReprise && CHARGE_DIRECTE_ACTIVE) {
+  if (paiementVerifie) {
+    const reste = paiementVerifie.remainingAmountXof ?? 0;
+    const solde = reste <= 0;
     return (
-      <ParcoursPaiement
-        key={`reprise-${dossierReprise.id}`}
-        dossier={{
-          idInscription: dossierReprise.id,
-          jeton: dossierReprise.jeton,
-          prenom: dossierReprise.prenom,
-          email: dossierReprise.email,
-          totalXof: dossierReprise.total,
-          minimumXof: dossierReprise.reste,
-          resteXof: dossierReprise.reste,
-          telephonePrefill: valeurs.telephone,
-        }}
-        onPrecedent={() => setDossierReprise(null)}
-      />
+      <div
+        role="status"
+        className="flex flex-col items-center gap-4 rounded-card border border-accent/60
+                   px-[clamp(1.25rem,3vw,2rem)] py-[clamp(1.5rem,4svh,2.5rem)] text-center"
+      >
+        <p className="font-mono text-small uppercase tracking-[0.2em] text-accent">
+          {solde ? "Place confirmée" : "Acompte enregistré"}
+        </p>
+        <p className="text-h2 font-bold leading-tight tracking-tight">
+          {solde
+            ? "Merci ! Ton inscription est confirmée."
+            : "Ton acompte est bien reçu."}
+        </p>
+        <p className="max-w-[38ch] text-body text-fg/75">
+          {solde
+            ? "Tout est réglé. On se retrouve très vite pour le sprint."
+            : `Reste à compléter : ${reste.toLocaleString("fr-FR")} FCFA. Tu pourras solder à tout moment via « Compléter mon inscription ».`}
+        </p>
+      </div>
+    );
+  }
+
+  if (dossierReprise) {
+    return (
+      <div className="flex flex-col gap-4 rounded-card border border-accent/40 p-5 text-center">
+        <p className="text-h3 font-bold">
+          Bon retour, {dossierReprise.prenom}.
+        </p>
+        <p className="text-body text-fg/75">
+          Reste à payer :{" "}
+          <strong>{dossierReprise.reste.toLocaleString("fr-FR")} FCFA</strong>
+        </p>
+        <CtaButton
+          type="button"
+          variante="vert"
+          disabled={paiementEnCours || verificationEnCours}
+          pleineLargeur
+          onClick={() =>
+            void lanceEtRedirige(
+              dossierReprise.id,
+              dossierReprise.jeton,
+              dossierReprise.prenom,
+              dossierReprise.reste,
+              dossierReprise.email,
+            )
+          }
+        >
+          {verificationEnCours
+            ? "Vérification en cours…"
+            : paiementEnCours
+              ? "Ouverture du paiement…"
+              : `Payer le reste — ${dossierReprise.reste.toLocaleString("fr-FR")} FCFA`}
+        </CtaButton>
+        {erreurPaiement ? (
+          <p role="alert" className="text-small font-medium text-fg">
+            {erreurPaiement}
+          </p>
+        ) : null}
+      </div>
     );
   }
 
   if (etat === "ok" && confirmee && !revientFormulaire) {
-    // Le parcours à étapes (voir `ParcoursPaiement`) : même modale, mêmes
-    // classes, navigation Précédent/Suivant. L'ancien écran de redirection
-    // Paystack suit, derrière le repli `CHARGE_DIRECTE_ACTIVE`.
-    if (CHARGE_DIRECTE_ACTIVE) {
-      return (
-        <ParcoursPaiement
-          key={`confirmee-${confirmee.id}`}
-          dossier={{
-            idInscription: confirmee.id,
-            jeton: confirmee.jeton,
-            prenom: confirmee.prenom,
-            email: confirmee.email,
-            totalXof: confirmee.totalXof,
-            minimumXof: confirmee.minimumXof,
-            forfait: confirmee.forfait,
-            binome: confirmee.binome,
-            telephonePrefill: confirmee.telephone,
-          }}
-          onPrecedent={() => setRevientFormulaire(true)}
-        />
-      );
-    }
-
-    // Un seul montant, déterminé automatiquement : le reste à payer
-    // (ici le total figé côté serveur, rien n'étant encore versé).
-    // Fini les 30 % : le minimum du dashboard reste le plancher servi
-    // par l'API, et le reste exact solde toujours, même sous le minimum.
-    // Le montant vient de l'inscription figée côté serveur (`confirmee`),
-    // jamais du catalogue : un prix modifié entre l'affichage et la
-    // réservation ne doit pas fausser le versement.
     const resteAPayer = confirmee.totalXof;
 
     return (
@@ -619,34 +744,37 @@ export function FormulaireInscription({
           )}
         </p>
 
-        {/* Deux montants déterminés automatiquement : le minimum du
-            dashboard pour réserver sa place, ou le reste à payer.
-            Le reste se règle plus tard avec l'e-mail de l'inscription,
-            depuis n'importe quel appareil. */}
         {confirmee.minimumXof < resteAPayer ? (
-          <CtaButton
-            type="button"
-            onClick={() => void paie(confirmee.minimumXof)}
-            disabled={paiementEnCours}
-            pleineLargeur
-            className="mt-[clamp(0.25rem,1svh,0.75rem)]"
-          >
-            {paiementEnCours
-              ? "Ouverture du paiement…"
-              : `Réserver ma place — ${confirmee.minimumXof.toLocaleString("fr-FR")} FCFA`}
-          </CtaButton>
+          <ChoixPaiementPartiel
+            minimumXof={confirmee.minimumXof}
+            resteXof={resteAPayer}
+            montant={montantRepli ?? resteAPayer}
+            onChangeMontant={setMontantRepli}
+            conditionsAcceptees={conditionsRepli}
+            onChangeConditions={setConditionsRepli}
+          />
         ) : null}
 
         <CtaButton
           type="button"
-          onClick={() => void paie(resteAPayer)}
-          disabled={paiementEnCours}
+          variante="vert"
+          onClick={() => {
+            const m = montantRepli ?? resteAPayer;
+            void paie(m, m < resteAPayer ? conditionsRepli : undefined);
+          }}
+          disabled={
+            paiementEnCours ||
+            verificationEnCours ||
+            ((montantRepli ?? resteAPayer) < resteAPayer && !conditionsRepli)
+          }
           pleineLargeur
           className="mt-[clamp(0.25rem,1svh,0.75rem)]"
         >
-          {paiementEnCours
-            ? "Ouverture du paiement…"
-            : `Payer — ${resteAPayer.toLocaleString("fr-FR")} FCFA`}
+          {verificationEnCours
+            ? "Vérification en cours…"
+            : paiementEnCours
+              ? "Ouverture du paiement…"
+              : `Payer — ${(montantRepli ?? resteAPayer).toLocaleString("fr-FR")} FCFA`}
         </CtaButton>
 
         {erreurPaiement && (
@@ -683,7 +811,12 @@ export function FormulaireInscription({
             type="button"
             role="radio"
             aria-checked={forfait === "SINGLE"}
-            onClick={() => setForfait("SINGLE")}
+            onClick={() => {
+              setForfait("SINGLE");
+              setMontantChoisi((m) =>
+                m >= prixActif ? edition.prixFCFA : edition.minimumFCFA,
+              );
+            }}
             className={`rounded-card border px-4 py-3 text-left transition-colors duration-[160ms] ${
               forfait === "SINGLE" ? "border-accent/60 bg-surface" : "border-fg/15"
             }`}
@@ -697,7 +830,12 @@ export function FormulaireInscription({
             type="button"
             role="radio"
             aria-checked={forfait === "DUO"}
-            onClick={() => setForfait("DUO")}
+            onClick={() => {
+              setForfait("DUO");
+              const duoPrix = edition.prixDuoFCFA ?? edition.prixFCFA;
+              const duoMin = edition.minimumDuoFCFA ?? edition.minimumFCFA;
+              setMontantChoisi((m) => (m >= prixActif ? duoPrix : duoMin));
+            }}
             className={`rounded-card border px-4 py-3 text-left transition-colors duration-[160ms] ${
               forfait === "DUO" ? "border-accent/60 bg-surface" : "border-fg/15"
             }`}
@@ -769,31 +907,43 @@ export function FormulaireInscription({
           />
         </div>
 
-        <Champ
+        <ChampTelephone
           nom="binomeTelephone"
           etiquette="Téléphone du binôme"
-          aide="Dix chiffres suffisent, on ajoute le +225."
+          indicatif={indicatifBinome}
+          onChangeIndicatif={(ind) => {
+            setIndicatifBinome(ind);
+            setErreurs((p) => {
+              const s = { ...p };
+              delete s.binomeTelephone;
+              return s;
+            });
+          }}
           valeur={valeurs.binomeTelephone}
           onChange={ecrit("binomeTelephone")}
           erreur={erreurs.binomeTelephone}
-          type="tel"
-          inputMode="tel"
           autoComplete="off"
           placeholder="07 04 92 10 80"
         />
         </>
       ) : null}
 
-      <Champ
+      <ChampTelephone
         nom="telephone"
         etiquette="Téléphone (WhatsApp)"
-        aide="Dix chiffres suffisent, on ajoute le +225."
+        indicatif={indicatifTel}
+        onChangeIndicatif={(ind) => {
+          setIndicatifTel(ind);
+          setErreurs((p) => {
+            const s = { ...p };
+            delete s.telephone;
+            return s;
+          });
+        }}
         valeur={valeurs.telephone}
         onChange={ecrit("telephone")}
         erreur={erreurs.telephone}
-        type="tel"
-        inputMode="tel"
-        autoComplete="tel"
+        autoComplete="tel-national"
         enterKeyHint="next"
         placeholder="07 04 92 10 80"
       />
@@ -839,45 +989,28 @@ export function FormulaireInscription({
                   (sur {reprise.total.toLocaleString("fr-FR")})
                 </span>
               </p>
-              {CHARGE_DIRECTE_ACTIVE ? (
-                <CtaButton
-                  type="button"
-                  onClick={() =>
-                    setDossierReprise({
-                      id: reprise.id,
-                      jeton: reprise.jeton,
-                      prenom: reprise.prenom,
-                      email: reprise.email,
-                      reste: reprise.reste,
-                      total: reprise.total,
-                    })
-                  }
-                  pleineLargeur
-                  className="mt-3"
-                >
-                  {`Payer le reste — ${reprise.reste.toLocaleString("fr-FR")} FCFA`}
-                </CtaButton>
-              ) : (
-                <CtaButton
-                  type="button"
-                  onClick={() =>
-                    void lanceEtRedirige(
-                      reprise.id,
-                      reprise.jeton,
-                      reprise.prenom,
-                      reprise.reste,
-                      reprise.email,
-                    )
-                  }
-                  disabled={paiementEnCours}
-                  pleineLargeur
-                  className="mt-3"
-                >
-                  {paiementEnCours
+              <CtaButton
+                type="button"
+                variante="vert"
+                disabled={paiementEnCours || verificationEnCours}
+                onClick={() =>
+                  void lanceEtRedirige(
+                    reprise.id,
+                    reprise.jeton,
+                    reprise.prenom,
+                    reprise.reste,
+                    reprise.email,
+                  )
+                }
+                pleineLargeur
+                className="mt-3"
+              >
+                {verificationEnCours
+                  ? "Vérification en cours…"
+                  : paiementEnCours
                     ? "Ouverture du paiement…"
                     : `Payer le reste — ${reprise.reste.toLocaleString("fr-FR")} FCFA`}
-                </CtaButton>
-              )}
+              </CtaButton>
               {erreurPaiement ? (
                 <p role="alert" className="mt-2 text-small font-medium text-fg">
                   {erreurPaiement}
@@ -904,6 +1037,17 @@ export function FormulaireInscription({
         </div>
       ) : null}
 
+      {minimumActif < prixActif ? (
+        <ChoixPaiementPartiel
+          minimumXof={minimumActif}
+          resteXof={prixActif}
+          montant={Math.min(Math.max(montantChoisi, minimumActif), prixActif)}
+          onChangeMontant={setMontantChoisi}
+          conditionsAcceptees={conditionsPartielles}
+          onChangeConditions={setConditionsPartielles}
+        />
+      ) : null}
+
       {erreurs.global && (
         <p role="alert" className="text-small font-medium text-fg">
           {erreurs.global}
@@ -912,11 +1056,16 @@ export function FormulaireInscription({
 
       <CtaButton
         type="submit"
-        disabled={etat === "envoi"}
+        variante="vert"
+        disabled={etat === "envoi" || (estPartielForm && !conditionsPartielles)}
         pleineLargeur
         className="mt-[clamp(0.25rem,1svh,0.75rem)]"
       >
-        {etat === "envoi" ? "Envoi…" : "Réserver ma place"}
+        {etat === "envoi"
+          ? "Envoi…"
+          : minimumActif < prixActif
+            ? `Réserver ma place — ${Math.min(Math.max(montantChoisi, minimumActif), prixActif).toLocaleString("fr-FR")} FCFA`
+            : "Réserver ma place"}
       </CtaButton>
 
       {/* Pas de case à cocher de consentement tant que la politique de

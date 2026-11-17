@@ -1,33 +1,26 @@
 import { Suspense } from "react";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import {
   exigeSession,
   inscriptions,
   sessionPerdue,
+  sprints,
   traduitAdmin,
 } from "@/lib/admin/api";
 import {
-  date,
-  montant,
-  nomEtudiant,
   LIBELLE_INSCRIPTION,
-  type Inscription,
   type StatutInscription,
 } from "@/lib/admin/types";
 import {
   Alerte,
-  Cellule,
-  Ligne,
+  EnTetePage,
   Pagination,
-  PastilleInscription,
-  Surtitre,
-  Tableau,
-  TitrePage,
   Vide,
 } from "@/components/admin/Briques";
 import { Filtres } from "@/components/admin/Filtres";
+import { BoutonExporterExcel } from "@/components/admin/BoutonExporterExcel";
+import { TableauInscriptionsClient } from "@/components/admin/TableauInscriptionsClient";
 
 /**
  * `/admin/inscriptions` — la liste, filtrable.
@@ -48,8 +41,16 @@ type Params = {
 export default function PageInscriptions({ searchParams }: Params) {
   return (
     <>
-      <Surtitre>Participants</Surtitre>
-      <TitrePage>Inscriptions</TitrePage>
+      <EnTetePage
+        surtitre="Participants"
+        titre="Inscriptions"
+        description="Suivi des dossiers Solo et Duo, soldes restants et validations."
+        action={
+          <Suspense fallback={null}>
+            <BoutonExporterExcel endpoint="/admin/api/export/inscriptions" />
+          </Suspense>
+        }
+      />
 
       <Suspense
         fallback={
@@ -74,11 +75,21 @@ async function Contenu({ searchParams }: Params) {
   const params = await searchParams;
   const statut = premier(params.statut);
   const recherche = premier(params.search);
+  const brutSprintId = premier(params.sprintId);
+  const sprintId = brutSprintId ? Number(brutSprintId) : undefined;
+  const sprintIdValide =
+    sprintId !== undefined && Number.isInteger(sprintId) && sprintId > 0
+      ? sprintId
+      : undefined;
   const page = Math.max(1, Number(premier(params.page) ?? 1) || 1);
 
   let liste;
+  let listeSprints;
   try {
-    liste = await inscriptions({ page, statut, recherche });
+    [liste, listeSprints] = await Promise.all([
+      inscriptions({ page, statut, recherche, sprintId: sprintIdValide }),
+      sprints({ limit: 100 }),
+    ]);
   } catch (cause) {
     if (sessionPerdue(cause)) redirect("/admin/connexion");
     return (
@@ -88,6 +99,10 @@ async function Contenu({ searchParams }: Params) {
     );
   }
 
+  const optionsSprints = (listeSprints?.items ?? []).filter(
+    (sp) => sp.status === "ACTIVE" || (sp.enrolledCount ?? 0) > 0,
+  );
+
   return (
     <>
       <div className="mt-[clamp(1.25rem,3svh,2rem)]">
@@ -95,6 +110,8 @@ async function Contenu({ searchParams }: Params) {
           action="/admin/inscriptions"
           statuts={STATUTS}
           statutActuel={statut}
+          sprints={optionsSprints}
+          sprintActuel={sprintIdValide ? String(sprintIdValide) : undefined}
           nomRecherche="search"
           valeurRecherche={recherche}
           placeholder="Nom, prénom ou e-mail"
@@ -104,59 +121,23 @@ async function Contenu({ searchParams }: Params) {
       <section className="mt-[clamp(1.25rem,3svh,2rem)] rounded-card border border-fg/15 bg-surface">
         {liste.items.length ? (
           <>
-            <Tableau
-              entetes={[
-                "Participant",
-                "Contact",
-                "Session",
-                "Statut",
-                "Payé",
-                "Reste",
-                "Inscrit le",
-              ]}
-            >
-              {liste.items.map((i: Inscription) => (
-                <Ligne key={i.id}>
-                  <Cellule>
-                    <Link
-                      href={`/admin/inscriptions/${i.id}`}
-                      className="text-fg underline decoration-fg/25 underline-offset-4"
-                    >
-                      {nomEtudiant(i.student)}
-                    </Link>
-                  </Cellule>
-                  <Cellule mono sourd>
-                    {i.student?.email ?? "—"}
-                    {i.student?.phone ? (
-                      <span className="block text-fg/40">
-                        {i.student.phone}
-                      </span>
-                    ) : null}
-                  </Cellule>
-                  <Cellule sourd>{i.sprint?.name ?? "—"}</Cellule>
-                  <Cellule>
-                    <PastilleInscription statut={i.status} />
-                  </Cellule>
-                  <Cellule mono>{montant(i.totalPaidXof)}</Cellule>
-                  <Cellule mono>{montant(i.remainingAmountXof)}</Cellule>
-                  <Cellule mono sourd>
-                    {date(i.createdAt)}
-                  </Cellule>
-                </Ligne>
-              ))}
-            </Tableau>
+            <TableauInscriptionsClient items={liste.items} />
 
             <Pagination
               base="/admin/inscriptions"
               page={liste.page}
               limit={liste.limit}
               total={liste.total}
-              parametres={{ statut, search: recherche }}
+              parametres={{
+                statut,
+                search: recherche,
+                sprintId: sprintIdValide ? String(sprintIdValide) : undefined,
+              }}
             />
           </>
         ) : (
           <Vide>
-            {statut || recherche
+            {statut || recherche || sprintIdValide
               ? "Aucune inscription ne correspond à ce filtre."
               : "Aucune inscription enregistrée pour l'instant."}
           </Vide>

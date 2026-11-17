@@ -1,5 +1,3 @@
-import Link from "next/link";
-
 import {
   LIBELLE_INSCRIPTION,
   LIBELLE_PAIEMENT,
@@ -38,6 +36,36 @@ export function TitrePage({ children }: { children: React.ReactNode }) {
     <h1 className="mt-2 text-h2 font-bold leading-[1.1] tracking-tight">
       {children}
     </h1>
+  );
+}
+
+export function EnTetePage({
+  surtitre,
+  titre,
+  description,
+  action,
+}: {
+  surtitre: string;
+  titre: string;
+  description?: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div
+      className="flex flex-wrap items-end justify-between gap-4 border-b
+                 border-fg/10 pb-6"
+    >
+      <div>
+        <Surtitre>{surtitre}</Surtitre>
+        <TitrePage>{titre}</TitrePage>
+        {description ? (
+          <p className="mt-3 max-w-[62ch] text-body text-fg/60">
+            {description}
+          </p>
+        ) : null}
+      </div>
+      {action ? <div className="shrink-0">{action}</div> : null}
+    </div>
   );
 }
 
@@ -126,183 +154,65 @@ export function Tuile({
   libelle,
   valeur,
   precision,
+  icone,
+  accent,
 }: {
   libelle: string;
   valeur: string;
   precision?: string;
+  icone?: React.ReactNode;
+  accent?: boolean;
 }) {
   return (
     <div
-      className="flex flex-col gap-1 rounded-card border border-fg/15
-                 bg-surface px-[clamp(1rem,3vw,1.5rem)]
-                 py-[clamp(1rem,3svh,1.5rem)]"
+      className="flex flex-col justify-between gap-3 rounded-card border
+                 border-fg/15 bg-surface px-[clamp(1rem,2.5vw,1.5rem)]
+                 py-[clamp(1rem,2.5svh,1.35rem)] transition-colors
+                 hover:border-fg/25"
     >
-      <p className="font-mono text-small uppercase tracking-[0.15em] text-fg/50">
-        {libelle}
-      </p>
-      <p className="text-h3 font-bold leading-none tracking-tight">{valeur}</p>
-      {precision ? (
-        <p className="font-mono text-small text-fg/45">{precision}</p>
-      ) : null}
+      <div className="flex items-start justify-between gap-2">
+        <p className="min-h-[2rem] font-mono text-small uppercase tracking-[0.14em] text-fg/55">
+          {libelle}
+        </p>
+        {icone ? (
+          <span
+            className={`flex h-8 w-8 shrink-0 items-center justify-center
+                        rounded-field border ${
+                          accent
+                            ? "border-accent/35 bg-accent/10 text-accent"
+                            : "border-fg/10 bg-bg/60 text-fg/60"
+                        }`}
+          >
+            {icone}
+          </span>
+        ) : null}
+      </div>
+      <div>
+        <p
+          className={`whitespace-nowrap tabular-nums text-[clamp(1.35rem,2vw,1.75rem)] font-bold leading-none tracking-tight ${
+            accent ? "text-accent" : "text-fg"
+          }`}
+        >
+          {valeur}
+        </p>
+        {precision ? (
+          <p className="mt-2 font-mono text-small text-fg/45">{precision}</p>
+        ) : (
+          <p className="mt-2 font-mono text-small text-transparent select-none">
+            &nbsp;
+          </p>
+        )}
+      </div>
     </div>
   );
 }
 
 /* ── Cadres et tableaux ──────────────────────────────────────────────── */
 
-export function Cadre({
-  titre,
-  action,
-  children,
-}: {
-  titre: string;
-  action?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="rounded-card border border-fg/15 bg-surface">
-      <header
-        className="flex flex-wrap items-center justify-between gap-3
-                   border-b border-fg/10 px-[clamp(1rem,3vw,1.5rem)] py-4"
-      >
-        <h2 className="font-mono text-small uppercase tracking-[0.2em] text-fg/60">
-          {titre}
-        </h2>
-        {action}
-      </header>
-      {children}
-    </section>
-  );
-}
-
-/**
- * Un tableau qui garde toutes ses colonnes sur téléphone.
- *
- * Le défilement horizontal est volontaire : masquer des colonnes sous une
- * largeur donnée reviendrait à retirer de l'information sans le dire, ce
- * que les règles du projet interdisent. Ici rien ne disparaît — on fait
- * glisser.
- */
-export function Tableau({
-  entetes,
-  children,
-}: {
-  entetes: string[];
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[44rem] border-collapse text-left">
-        <thead>
-          <tr className="border-b border-fg/10">
-            {entetes.map((e) => (
-              <th
-                key={e}
-                scope="col"
-                className="whitespace-nowrap px-[clamp(0.75rem,2vw,1.25rem)] py-3
-                           font-mono text-small font-normal uppercase
-                           tracking-[0.15em] text-fg/45"
-              >
-                {e}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>{children}</tbody>
-      </table>
-    </div>
-  );
-}
-
-export function Ligne({ children }: { children: React.ReactNode }) {
-  return (
-    <tr className="border-b border-fg/[0.07] last:border-0">{children}</tr>
-  );
-}
-
-export function Cellule({
-  children,
-  mono,
-  sourd,
-}: {
-  children: React.ReactNode;
-  mono?: boolean;
-  sourd?: boolean;
-}) {
-  return (
-    <td
-      className={`px-[clamp(0.75rem,2vw,1.25rem)] py-3 align-middle text-small
-                  ${mono ? "font-mono" : ""} ${sourd ? "text-fg/50" : "text-fg/85"}`}
-    >
-      {children}
-    </td>
-  );
-}
-
-/* ── Pagination ──────────────────────────────────────────────────────── */
-
-/**
- * L'API ne renvoie pas de `totalPages`, seulement `total`, `page` et
- * `limit` — c'est noté tel quel dans sa doc. On le calcule donc ici.
- */
-export function Pagination({
-  base,
-  page,
-  limit,
-  total,
-  parametres,
-}: {
-  base: string;
-  page: number;
-  limit: number;
-  total: number;
-  parametres?: Record<string, string | undefined>;
-}) {
-  const pages = Math.max(1, Math.ceil(total / Math.max(1, limit)));
-  if (pages <= 1) return null;
-
-  const lien = (p: number) => {
-    const q = new URLSearchParams();
-    for (const [cle, valeur] of Object.entries(parametres ?? {})) {
-      if (valeur) q.set(cle, valeur);
-    }
-    q.set("page", String(p));
-    return `${base}?${q}`;
-  };
-
-  return (
-    <nav
-      aria-label="Pagination"
-      className="flex items-center justify-between gap-4
-                 border-t border-fg/10 px-[clamp(1rem,3vw,1.5rem)] py-4"
-    >
-      {page > 1 ? (
-        <Link
-          href={lien(page - 1)}
-          className="rounded-field border border-fg/20 px-4 py-2
-                     font-mono text-small text-fg/80"
-        >
-          ← Précédent
-        </Link>
-      ) : (
-        <span />
-      )}
-
-      <p className="font-mono text-small text-fg/45">
-        Page {page} sur {pages} · {total} au total
-      </p>
-
-      {page < pages ? (
-        <Link
-          href={lien(page + 1)}
-          className="rounded-field border border-fg/20 px-4 py-2
-                     font-mono text-small text-fg/80"
-        >
-          Suivant →
-        </Link>
-      ) : (
-        <span />
-      )}
-    </nav>
-  );
-}
+export {
+  Cadre,
+  Tableau,
+  Ligne,
+  Cellule,
+  Pagination,
+} from "./BriquesTableau";

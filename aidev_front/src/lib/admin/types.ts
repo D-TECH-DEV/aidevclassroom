@@ -40,10 +40,10 @@ export type StatutSprint = "DRAFT" | "ACTIVE" | "INACTIVE" | "COMPLETED";
  * « Lancer » = `DRAFT` → `ACTIVE` (ou `INACTIVE` → `ACTIVE`).
  */
 export const TRANSITIONS_SPRINT: Record<StatutSprint, StatutSprint[]> = {
-  DRAFT: ["ACTIVE", "INACTIVE"],
-  ACTIVE: ["INACTIVE", "COMPLETED"],
-  INACTIVE: ["ACTIVE", "DRAFT"],
-  COMPLETED: [],
+  DRAFT: ["ACTIVE", "INACTIVE", "COMPLETED"],
+  ACTIVE: ["DRAFT", "INACTIVE", "COMPLETED"],
+  INACTIVE: ["DRAFT", "ACTIVE", "COMPLETED"],
+  COMPLETED: ["DRAFT", "ACTIVE", "INACTIVE"],
 };
 
 export type Sprint = {
@@ -64,6 +64,8 @@ export type Sprint = {
   level?: string | null;
   modules?: string[] | null;
   status: StatutSprint;
+  enrolledCount?: number;
+  enrolledSeats?: number;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -92,6 +94,7 @@ export type QuestionFaqAdmin = {
 export type ContenuSiteAdmin = {
   whatsappDisplay: string;
   whatsappHref: string;
+  contactEmail?: string | null;
   trainers: FormateurAdmin[];
   faqs: QuestionFaqAdmin[];
 };
@@ -148,6 +151,7 @@ export type Inscription = {
   totalPaidXof?: number;
   /** `max(0, total − payé)`. Même présence. */
   remainingAmountXof?: number;
+  partialTermsAcceptedAt?: string | null;
   createdAt?: string;
   updatedAt?: string;
   student?: Etudiant;

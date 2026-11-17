@@ -30,12 +30,14 @@ export type PublicFaqItem = {
 export type SiteContentPayload = {
   whatsappDisplay: string;
   whatsappHref: string;
+  contactEmail: string | null;
   trainers: PublicTrainer[];
   faqs: PublicFaqItem[];
 };
 
 const DEFAULT_WHATSAPP_DISPLAY = '07 04 92 10 80';
 const DEFAULT_WHATSAPP_HREF = 'https://wa.me/2250704921080';
+const DEFAULT_CONTACT_EMAIL = 'contact@aidevclassroom.com';
 
 @Injectable()
 export class SiteContentService {
@@ -103,6 +105,8 @@ export class SiteContentService {
       whatsappDisplay:
         settings?.whatsappDisplay?.trim() || DEFAULT_WHATSAPP_DISPLAY,
       whatsappHref: settings?.whatsappHref?.trim() || DEFAULT_WHATSAPP_HREF,
+      contactEmail:
+        this.normalizeOptional(settings?.contactEmail) ?? DEFAULT_CONTACT_EMAIL,
       trainers: trainers.map((row) => this.mapTrainer(row)),
       faqs: faqs.map((row) => this.mapFaq(row)),
     };
@@ -134,12 +138,13 @@ export class SiteContentService {
   async updateContent(dto: UpdateSiteContentDto): Promise<SiteContentPayload> {
     const whatsappDisplay = dto.whatsappDisplay.trim();
     const whatsappHref = dto.whatsappHref.trim();
+    const contactEmail = this.normalizeOptional(dto.contactEmail);
 
     await this.prisma.$transaction(async (tx) => {
       await tx.siteSetting.upsert({
         where: { id: 1 },
-        update: { whatsappDisplay, whatsappHref },
-        create: { id: 1, whatsappDisplay, whatsappHref },
+        update: { whatsappDisplay, whatsappHref, contactEmail },
+        create: { id: 1, whatsappDisplay, whatsappHref, contactEmail },
       });
 
       if (dto.trainers !== undefined) {

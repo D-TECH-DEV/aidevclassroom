@@ -99,7 +99,11 @@ function CarteSprint({
           le bouton flotte au milieu de la plus haute. */}
       <span aria-hidden className="min-h-[clamp(1.5rem,4svh,3rem)] flex-1" />
 
-      <BoutonReserver taille="sm" sprintId={sprint.id}>
+      <BoutonReserver
+        taille="sm"
+        sprintId={sprint.id}
+        className="bg-bg border-bg text-fg hoverable:hover:border-cta"
+      >
         Réserver
       </BoutonReserver>
     </li>
@@ -131,10 +135,15 @@ export function Parcours({ sprints }: { sprints: Edition[] }) {
             ))}
           </ul>
         ) : (
-          <p className="mt-[clamp(2.5rem,8svh,5rem)] max-w-[60ch] rounded-card border border-fg/10 p-[clamp(1.5rem,2.5vw,2rem)] font-mono text-small text-accent/70">
-            {A_DETERMINER} — aucun sprint n&apos;est publié pour l&apos;instant.
-            Les inscriptions ouvriront avec la prochaine session.
-          </p>
+          <div className="mt-[clamp(2.5rem,8svh,5rem)] max-w-[60ch] rounded-card border border-fg/15 bg-surface/60 p-[clamp(1.5rem,2.5vw,2rem)]">
+            <p className="font-mono text-small uppercase tracking-[0.15em] text-accent">
+              Aucune session active
+            </p>
+            <p className="mt-2 text-body text-fg/80">
+              Aucun sprint n&apos;est programmé pour le moment. Les inscriptions
+              ouvriront dès l&apos;annonce de la prochaine session.
+            </p>
+          </div>
         )}
       </Reveal>
     </section>

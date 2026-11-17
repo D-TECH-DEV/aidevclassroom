@@ -7,61 +7,23 @@ import {
 import { Prisma, SprintStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { countEnrolled } from './enrolled-count.util';
+import {
+  buildSprintUpdateData,
+  checkSprintAmounts,
+  normalizeModules,
+  normalizeOptionalText,
+} from './sprint-validation.util';
 
 export const SPRINT_TRANSITIONS: Record<SprintStatus, SprintStatus[]> = {
-  DRAFT: ['ACTIVE', 'INACTIVE'],
-  ACTIVE: ['INACTIVE', 'COMPLETED'],
-  INACTIVE: ['ACTIVE', 'DRAFT'],
-  COMPLETED: [],
+  DRAFT: ['ACTIVE', 'INACTIVE', 'COMPLETED'],
+  ACTIVE: ['DRAFT', 'INACTIVE', 'COMPLETED'],
+  INACTIVE: ['DRAFT', 'ACTIVE', 'COMPLETED'],
+  COMPLETED: ['DRAFT', 'ACTIVE', 'INACTIVE'],
 };
 
 @Injectable()
 export class SprintsService {
   constructor(private readonly prisma: PrismaService) {}
-
-  private checkAmounts(
-    priceXof: number,
-    minimumPaymentXof: number,
-    duoPriceXof?: number | null,
-    duoMinimumPaymentXof?: number | null,
-  ): void {
-    if (minimumPaymentXof > priceXof) {
-      throw new BadRequestException({
-        code: 'MINIMUM_EXCEEDS_PRICE',
-        message: 'Le minimum de versement ne peut pas depasser le prix.',
-      });
-    }
-    if (duoMinimumPaymentXof != null && duoPriceXof == null) {
-      throw new BadRequestException({
-        code: 'DUO_MINIMUM_WITHOUT_PRICE',
-        message: 'Le minimum duo exige un prix duo.',
-      });
-    }
-    if (
-      duoPriceXof != null &&
-      duoMinimumPaymentXof != null &&
-      duoMinimumPaymentXof > duoPriceXof
-    ) {
-      throw new BadRequestException({
-        code: 'DUO_MINIMUM_EXCEEDS_PRICE',
-        message: 'Le minimum duo ne peut pas depasser le prix duo.',
-      });
-    }
-  }
-
-  private normalizeOptionalText(value?: string | null): string | null {
-    const trimmed = value?.trim();
-    return trimmed ? trimmed : null;
-  }
-
-  private normalizeModules(modules?: string[] | null): string[] | null {
-    if (!modules) return null;
-    const cleaned = modules
-      .map((item) => item.trim())
-      .filter((item) => item.length > 0)
-      .slice(0, 8);
-    return cleaned.length > 0 ? cleaned : null;
-  }
 
   async create(data: {
     name: string;
@@ -81,7 +43,7 @@ export class SprintsService {
     modules?: string[];
     status?: SprintStatus;
   }) {
-    this.checkAmounts(
+    checkSprintAmounts(
       data.priceXof,
       data.minimumPaymentXof,
       data.duoPriceXof,
@@ -106,11 +68,11 @@ export class SprintsService {
           startAt: new Date(data.startAt),
           endAt: new Date(data.endAt),
           capacity: data.capacity ?? null,
-          city: this.normalizeOptionalText(data.city),
-          location: this.normalizeOptionalText(data.location),
-          format: this.normalizeOptionalText(data.format),
-          level: this.normalizeOptionalText(data.level),
-          modules: this.normalizeModules(data.modules) ?? Prisma.JsonNull,
+          city: normalizeOptionalText(data.city),
+          location: normalizeOptionalText(data.location),
+          format: normalizeOptionalText(data.format),
+          level: normalizeOptionalText(data.level),
+          modules: normalizeModules(data.modules) ?? Prisma.JsonNull,
           status: data.status ?? 'DRAFT',
         },
       });
@@ -128,13 +90,6 @@ export class SprintsService {
     }
   }
 
-  /**
-   * Le catalogue public : les sprints visibles du site. `ACTIVE` pour
-   * les inscriptions ouvertes, `INACTIVE` pour les sessions annoncées
-   * en « Bientôt ». Ni les brouillons (`DRAFT`), ni les sessions
-   * terminées (`COMPLETED`) : un brouillon n'est pas une annonce, et
-   * une session terminée n'est pas à venir.
-   */
   async listPublic(page = 1, limit = 20) {
     const take = Math.min(Math.max(limit, 1), 100);
     const skip = (Math.max(page, 1) - 1) * take;
@@ -153,10 +108,18 @@ export class SprintsService {
     };
   }
 
-  listAll(page = 1, limit = 20, status?: SprintStatus) {
+  async listAll(page = 1, limit = 20, status?: SprintStatus) {
     const take = Math.min(Math.max(limit, 1), 100);
     const skip = (Math.max(page, 1) - 1) * take;
-    return this.listWhere(status ? { status } : {}, skip, take);
+    const base = await this.listWhere(status ? { status } : {}, skip, take);
+    const counts = await this.countMap(base.items);
+    return {
+      ...base,
+      items: base.items.map((sprint) => ({
+        ...sprint,
+        ...counts.get(sprint.id),
+      })),
+    };
   }
 
   private async listWhere(
@@ -188,12 +151,6 @@ export class SprintsService {
     return { ...sprint, ...counts.get(sprint.id) };
   }
 
-  /**
-   * Compteur public d'inscrits : dossiers non annules dont le total des
-   * versements SUCCESS atteint le minimum du sprint (minimum duo pour un
-   * dossier DUO quand il est defini). Visible pour les sessions `ACTIVE`
-   * et `INACTIVE` (le catalogue public), 404 sinon.
-   */
   async countEnrolled(id: number) {
     const sprint = await this.prisma.sprint.findUnique({ where: { id } });
     if (
@@ -213,7 +170,6 @@ export class SprintsService {
     };
   }
 
-  /** Compte les inscrits d'un lot de sprints en une seule requete. */
   private async countMap(
     sprints: {
       id: number;
@@ -228,7 +184,9 @@ export class SprintsService {
     for (const sprint of sprints) {
       counts.set(sprint.id, { enrolledCount: 0, enrolledSeats: 0 });
     }
-    if (sprints.length === 0) return counts;
+    if (sprints.length === 0 || !this.prisma.enrollment?.findMany) {
+      return counts;
+    }
     const thresholds = new Map(
       sprints.map((s) => [
         s.id,
@@ -247,6 +205,7 @@ export class SprintsService {
         sprintId: true,
         plan: true,
         status: true,
+        totalAmountXof: true,
         payments: {
           where: { status: 'SUCCESS' },
           select: { status: true, amountXof: true },
@@ -278,7 +237,8 @@ export class SprintsService {
         message: 'Sprint introuvable.',
       });
     }
-    return sprint;
+    const counts = await this.countMap([sprint]);
+    return { ...sprint, ...counts.get(sprint.id) };
   }
 
   async update(
@@ -312,79 +272,28 @@ export class SprintsService {
         ? data.duoMinimumPaymentXof
         : ((sprint as { duoMinimumPaymentXof?: number | null })
             .duoMinimumPaymentXof ?? null);
-    this.checkAmounts(priceXof, minimum, duoPrice, duoMinimum);
+    checkSprintAmounts(priceXof, minimum, duoPrice, duoMinimum);
     const startAt = data.startAt ? new Date(data.startAt) : sprint.startAt;
     const endAt = data.endAt ? new Date(data.endAt) : sprint.endAt;
     if (startAt >= endAt) {
-      throw new BadRequestException({
-        code: 'INVALID_DATES',
-        message: 'La date de fin doit etre posterieure a la date de debut.',
-      });
+      throw new BadRequestException({ code: 'INVALID_DATES', message: 'La date de fin doit etre posterieure a la date de debut.' });
     }
-    return this.prisma.sprint.update({
-      where: { id },
-      data: {
-        ...(data.name !== undefined ? { name: data.name.trim() } : {}),
-        ...(data.description !== undefined
-          ? { description: data.description }
-          : {}),
-        ...(data.priceXof !== undefined ? { priceXof: data.priceXof } : {}),
-        ...(data.minimumPaymentXof !== undefined
-          ? { minimumPaymentXof: data.minimumPaymentXof }
-          : {}),
-        ...(data.duoPriceXof !== undefined
-          ? { duoPriceXof: data.duoPriceXof }
-          : {}),
-        ...(data.duoMinimumPaymentXof !== undefined
-          ? { duoMinimumPaymentXof: data.duoMinimumPaymentXof }
-          : {}),
-        ...(data.startAt !== undefined ? { startAt } : {}),
-        ...(data.endAt !== undefined ? { endAt } : {}),
-        ...(data.capacity !== undefined ? { capacity: data.capacity } : {}),
-        ...(data.city !== undefined
-          ? { city: this.normalizeOptionalText(data.city) }
-          : {}),
-        ...(data.location !== undefined
-          ? { location: this.normalizeOptionalText(data.location) }
-          : {}),
-        ...(data.format !== undefined
-          ? { format: this.normalizeOptionalText(data.format) }
-          : {}),
-        ...(data.level !== undefined
-          ? { level: this.normalizeOptionalText(data.level) }
-          : {}),
-        ...(data.modules !== undefined
-          ? {
-              modules: this.normalizeModules(data.modules) ?? Prisma.JsonNull,
-            }
-          : {}),
-      },
-    });
+    return this.prisma.sprint.update({ where: { id }, data: buildSprintUpdateData(data, startAt, endAt) });
   }
 
   async changeStatus(id: number, status: SprintStatus) {
     const sprint = await this.detail(id);
-    const allowed = SPRINT_TRANSITIONS[sprint.status];
-    if (sprint.status !== status && !allowed.includes(status)) {
-      throw new BadRequestException({
-        code: 'INVALID_STATUS_TRANSITION',
-        message: `Transition de ${sprint.status} vers ${status} non permise.`,
-      });
+    if (sprint.status !== status && !SPRINT_TRANSITIONS[sprint.status].includes(status)) {
+      throw new BadRequestException({ code: 'INVALID_STATUS_TRANSITION', message: `Transition de ${sprint.status} vers ${status} non permise.` });
     }
     return this.prisma.sprint.update({ where: { id }, data: { status } });
   }
 
   async remove(id: number) {
     await this.detail(id);
-    const count = await this.prisma.enrollment.count({
-      where: { sprintId: id },
-    });
+    const count = await this.prisma.enrollment.count({ where: { sprintId: id } });
     if (count > 0) {
-      throw new ConflictException({
-        code: 'SPRINT_HAS_ENROLLMENTS',
-        message:
-          'Suppression impossible : des inscriptions existent. Desactivez ou terminez le Sprint.',
-      });
+      throw new ConflictException({ code: 'SPRINT_HAS_ENROLLMENTS', message: 'Suppression impossible : des inscriptions existent. Desactivez ou terminez le Sprint.' });
     }
     await this.prisma.sprint.delete({ where: { id } });
     return { deleted: true };

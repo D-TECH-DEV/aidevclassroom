@@ -3,7 +3,6 @@
 import { useRef, type ReactNode } from "react";
 import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
-import { MODULES_DEFAUT } from "@/lib/edition";
 
 /**
  * Les 4 temps de la journée, à droite du hero.
@@ -54,10 +53,11 @@ const GLYPHES = [
 
 export function ModulesProgramme({ modules }: { modules?: string[] }) {
   const liste = useRef<HTMLOListElement>(null);
-  const etapes = modules && modules.length > 0 ? modules : MODULES_DEFAUT;
+  const etapes = modules ?? [];
 
   useGSAP(
     () => {
+      if (etapes.length === 0) return;
       const mm = gsap.matchMedia();
       mm.add("(prefers-reduced-motion: no-preference)", () => {
         const tl = gsap.timeline({ delay: 0.2 });
@@ -77,6 +77,8 @@ export function ModulesProgramme({ modules }: { modules?: string[] }) {
     },
     { scope: liste, dependencies: [etapes.join("|")] },
   );
+
+  if (etapes.length === 0) return null;
 
   return (
     <ol

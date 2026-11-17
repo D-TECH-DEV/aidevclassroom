@@ -11,13 +11,15 @@ import { hashTrackingToken } from '../common/guards/tracking-token.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { normalizeStudentInput } from '../students/students.service';
 import { remainingAmountXof, totalPaidXof } from '../payments/balance.util';
+import {
+  ADMIN_ENROLLMENT_INCLUDE,
+  PARTICIPANT_PAYMENTS_SELECT,
+  PARTICIPANT_SPRINT_SELECT,
+  buildAdminEnrollmentWhere,
+  validateDuoPartner,
+  type AdminEnrollmentFilters,
+} from './enrollment-query.util';
 
-/**
- * Transitions permises (RG07) — l'etat d'inscription est separe de l'etat
- * des paiements : un paiement echoue n'annule jamais l'inscription.
- * COMPLETED = inscription soldee ET validee par un admin (ne signifie pas
- * "sprint termine" pedagogiquement).
- */
 export const ENROLLMENT_TRANSITIONS: Record<
   EnrollmentStatus,
   EnrollmentStatus[]
@@ -47,60 +49,31 @@ export class EnrollmentsService {
       where: { id: sprintId },
     });
     if (!sprint) {
-      throw new NotFoundException({
-        code: 'SPRINT_NOT_FOUND',
-        message: 'Sprint introuvable.',
-      });
+      throw new NotFoundException({ code: 'SPRINT_NOT_FOUND', message: 'Sprint introuvable.' });
     }
     if (sprint.status !== 'ACTIVE') {
-      throw new UnprocessableEntityException({
-        code: 'SPRINT_NOT_ACTIVE',
-        message: "Ce Sprint n'accepte pas de nouvelles inscriptions.",
-      });
+      throw new UnprocessableEntityException({ code: 'SPRINT_NOT_ACTIVE', message: "Ce Sprint n'accepte pas de nouvelles inscriptions." });
     }
     const plan = (planInput ?? 'SINGLE').toUpperCase();
     if (plan !== 'SINGLE' && plan !== 'DUO') {
-      throw new BadRequestException({
-        code: 'INVALID_PLAN',
-        message: 'Forfait inconnu : SINGLE ou DUO.',
-      });
+      throw new BadRequestException({ code: 'INVALID_PLAN', message: 'Forfait inconnu : SINGLE ou DUO.' });
     }
-    const sprintDuo = sprint as typeof sprint & {
-      duoPriceXof?: number | null;
-    };
+    const sprintDuo = sprint as typeof sprint & { duoPriceXof?: number | null };
     if (plan === 'DUO' && sprintDuo.duoPriceXof == null) {
-      throw new UnprocessableEntityException({
-        code: 'DUO_NOT_AVAILABLE',
-        message: 'Le forfait duo est indisponible pour ce Sprint.',
-      });
+      throw new UnprocessableEntityException({ code: 'DUO_NOT_AVAILABLE', message: 'Le forfait duo est indisponible pour ce Sprint.' });
     }
-    const partnerFirstName = partnerInput?.firstName?.trim() ?? '';
-    const partnerLastName = partnerInput?.lastName?.trim() ?? '';
-    const partnerPhone = (partnerInput?.phone ?? '').replace(/[\s-]/g, '');
-    if (
-      plan === 'DUO' &&
-      (partnerFirstName.length < 2 ||
-        partnerLastName.length < 2 ||
-        !/^\+[1-9]\d{6,17}$/.test(partnerPhone))
-    ) {
-      throw new BadRequestException({
-        code: 'PARTNER_REQUIRED',
-        message:
-          'Le nom et le numero du binome sont requis pour le forfait duo.',
-      });
-    }
-    // RG04 : prix fige selon le forfait choisi.
+    const { partnerFirstName, partnerLastName, partnerPhone } =
+      validateDuoPartner(plan, partnerInput);
     const total =
       plan === 'DUO' ? (sprintDuo.duoPriceXof as number) : sprint.priceXof;
     const seatsNeeded = plan === 'DUO' ? 2 : 1;
     const n = normalizeStudentInput(studentInput);
-    // Capacite + doublon + creation dans une transaction (RG14, anti-concurrence).
-    // Un dossier DUO occupe 2 places.
+
     try {
-      const result = await this.prisma.$transaction(async (tx) => {
+      return await this.prisma.$transaction(async (tx) => {
         if (sprint.capacity != null) {
           const rows = await tx.enrollment.findMany({
-            where: { sprintId, status: { not: 'CANCELLED' } },
+            where: { sprintId, status: { in: ['CONFIRMED', 'COMPLETED'] } },
             select: { plan: true },
           });
           const used = rows.reduce(
@@ -114,14 +87,16 @@ export class EnrollmentsService {
             });
           }
         }
-        let student = await tx.student.findUnique({
-          where: { email: n.email },
-        });
+        let student = await tx.student.findUnique({ where: { email: n.email } });
         if (!student) {
           student = await tx.student.create({ data: n });
         }
-        const dup = await tx.enrollment.findUnique({
-          where: { studentId_sprintId: { studentId: student.id, sprintId } },
+        const dup = await tx.enrollment.findFirst({
+          where: {
+            studentId: student.id,
+            sprintId,
+            status: { not: 'CANCELLED' },
+          },
         });
         if (dup) {
           throw new ConflictException({
@@ -135,7 +110,7 @@ export class EnrollmentsService {
             studentId: student.id,
             sprintId,
             totalAmountXof: total,
-            plan: plan,
+            plan,
             partnerFirstName: plan === 'DUO' ? partnerFirstName : null,
             partnerLastName: plan === 'DUO' ? partnerLastName : null,
             partnerPhone: plan === 'DUO' ? partnerPhone : null,
@@ -146,7 +121,6 @@ export class EnrollmentsService {
         });
         return { enrollment, trackingToken };
       });
-      return result;
     } catch (e) {
       if (
         e instanceof Prisma.PrismaClientKnownRequestError &&
@@ -161,44 +135,38 @@ export class EnrollmentsService {
     }
   }
 
-  /**
-   * Retrouve les dossiers d'un e-mail et re-emet un jeton de suivi par
-   * dossier (rotation). Le jeton d'origine n'est stocke que hache et ne
-   * peut pas etre relu : on en genere un nouveau et on remplace le hash.
-   * Sans OTP, quiconque connait l'e-mail obtient l'acces — assume.
-   */
   async findByEmail(email: string) {
-    const clean = email.trim().toLowerCase();
-    const student = await this.prisma.student.findUnique({
-      where: { email: clean },
-    });
-    if (!student) {
+    return this.findByContact(email, undefined);
+  }
+
+  async findByContact(email?: string, phone?: string) {
+    const cleanEmail = email?.trim().toLowerCase();
+    const cleanPhone = phone?.trim();
+    if (!cleanEmail && !cleanPhone) {
       return { dossiers: [] };
     }
+
+    const students = cleanEmail
+      ? await (async () => {
+          const s = await this.prisma.student.findUnique({
+            where: { email: cleanEmail },
+          });
+          return s ? [s] : [];
+        })()
+      : await this.prisma.student.findMany({ where: { phone: cleanPhone } });
+
+    if (students.length === 0) return { dossiers: [] };
+
     const enrollments = await this.prisma.enrollment.findMany({
-      where: { studentId: student.id },
+      where: {
+        studentId: { in: students.map((s) => s.id) },
+        status: { not: 'CANCELLED' },
+      },
       include: {
-        sprint: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-            status: true,
-            minimumPaymentXof: true,
-          },
-        },
+        sprint: { select: PARTICIPANT_SPRINT_SELECT },
         payments: {
           orderBy: { createdAt: 'desc' },
-          select: {
-            id: true,
-            amountXof: true,
-            currency: true,
-            reference: true,
-            status: true,
-            authorizationUrl: true,
-            paidAt: true,
-            createdAt: true,
-          },
+          select: PARTICIPANT_PAYMENTS_SELECT,
         },
       },
       orderBy: { createdAt: 'desc' },
@@ -219,61 +187,37 @@ export class EnrollmentsService {
     return { dossiers };
   }
 
-  async listAdmin(
-    page = 1,
-    limit = 20,
-    filters: {
-      sprintId?: number;
-      status?: EnrollmentStatus;
-      search?: string;
-    } = {},
-  ) {
+  async listAdmin(page = 1, limit = 20, filters: AdminEnrollmentFilters = {}) {
     const take = Math.min(Math.max(limit, 1), 100);
     const skip = (Math.max(page, 1) - 1) * take;
-    const where: Prisma.EnrollmentWhereInput = {
-      ...(filters.sprintId ? { sprintId: filters.sprintId } : {}),
-      ...(filters.status ? { status: filters.status } : {}),
-      ...(filters.search
-        ? {
-            student: {
-              OR: [
-                { firstName: { contains: filters.search } },
-                { lastName: { contains: filters.search } },
-                { email: { contains: filters.search } },
-              ],
-            },
-          }
-        : {}),
-    };
+    const where = buildAdminEnrollmentWhere(filters);
     const [items, total] = await Promise.all([
       this.prisma.enrollment.findMany({
         where,
         skip,
         take,
         orderBy: { createdAt: 'desc' },
-        include: {
-          student: true,
-          sprint: {
-            select: {
-              id: true,
-              name: true,
-              slug: true,
-              status: true,
-              minimumPaymentXof: true,
-            },
-          },
-          payments: { orderBy: { createdAt: 'desc' } },
-        },
+        include: ADMIN_ENROLLMENT_INCLUDE,
       }),
       this.prisma.enrollment.count({ where }),
     ]);
-    const enriched = items.map((e) => this.withBalance(e));
     return {
-      items: enriched,
+      items: items.map((e) => this.withBalance(e)),
       total,
       page: Math.floor(skip / take) + 1,
       limit: take,
     };
+  }
+
+  async exportAdmin(filters: AdminEnrollmentFilters = {}) {
+    const where = buildAdminEnrollmentWhere(filters);
+    const items = await this.prisma.enrollment.findMany({
+      where,
+      take: 5000,
+      orderBy: { createdAt: 'desc' },
+      include: ADMIN_ENROLLMENT_INCLUDE,
+    });
+    return items.map((e) => this.withBalance(e));
   }
 
   withBalance<
@@ -308,32 +252,14 @@ export class EnrollmentsService {
     return this.withBalance(e);
   }
 
-  /** Resume minimal protege par jeton de suivi (RG16). */
   async statusForParticipant(id: number) {
     const e = await this.prisma.enrollment.findUnique({
       where: { id },
       include: {
-        sprint: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-            status: true,
-            minimumPaymentXof: true,
-          },
-        },
+        sprint: { select: PARTICIPANT_SPRINT_SELECT },
         payments: {
           orderBy: { createdAt: 'desc' },
-          select: {
-            id: true,
-            amountXof: true,
-            currency: true,
-            reference: true,
-            status: true,
-            authorizationUrl: true,
-            paidAt: true,
-            createdAt: true,
-          },
+          select: PARTICIPANT_PAYMENTS_SELECT,
         },
       },
     });
@@ -375,6 +301,15 @@ export class EnrollmentsService {
           message: 'Solde restant non nul : impossible de cloturer.',
         });
       }
+    }
+    if (status === 'CANCELLED') {
+      return this.prisma.$transaction(async (tx) => {
+        await tx.payment.updateMany({
+          where: { enrollmentId: id, status: 'PENDING' },
+          data: { status: 'ABANDONED' },
+        });
+        return tx.enrollment.update({ where: { id }, data: { status } });
+      });
     }
     return this.prisma.enrollment.update({ where: { id }, data: { status } });
   }

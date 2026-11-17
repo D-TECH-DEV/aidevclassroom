@@ -6,6 +6,7 @@ import {
   exigeSession,
   paiements,
   sessionPerdue,
+  sprints,
   traduitAdmin,
 } from "@/lib/admin/api";
 import {
@@ -19,16 +20,16 @@ import {
 import {
   Alerte,
   Cellule,
+  EnTetePage,
   Ligne,
   Pagination,
   PastillePaiement,
-  Surtitre,
   Tableau,
-  TitrePage,
   Vide,
 } from "@/components/admin/Briques";
 import { Filtres } from "@/components/admin/Filtres";
 import { BoutonReverifier } from "@/components/admin/BoutonAction";
+import { BoutonExporterExcel } from "@/components/admin/BoutonExporterExcel";
 
 /**
  * `/admin/paiements` — tous les versements.
@@ -50,8 +51,16 @@ type Params = {
 export default function PagePaiements({ searchParams }: Params) {
   return (
     <>
-      <Surtitre>Encaissements</Surtitre>
-      <TitrePage>Paiements</TitrePage>
+      <EnTetePage
+        surtitre="Encaissements"
+        titre="Paiements"
+        description="Historique des transactions Paystack et relance de vérification."
+        action={
+          <Suspense fallback={null}>
+            <BoutonExporterExcel endpoint="/admin/api/export/paiements" />
+          </Suspense>
+        }
+      />
 
       <Suspense
         fallback={
@@ -75,11 +84,21 @@ async function Contenu({ searchParams }: Params) {
   const params = await searchParams;
   const statut = premier(params.statut);
   const reference = premier(params.reference);
+  const brutSprintId = premier(params.sprintId);
+  const sprintId = brutSprintId ? Number(brutSprintId) : undefined;
+  const sprintIdValide =
+    sprintId !== undefined && Number.isInteger(sprintId) && sprintId > 0
+      ? sprintId
+      : undefined;
   const page = Math.max(1, Number(premier(params.page) ?? 1) || 1);
 
   let liste;
+  let listeSprints;
   try {
-    liste = await paiements({ page, statut, reference });
+    [liste, listeSprints] = await Promise.all([
+      paiements({ page, statut, reference, sprintId: sprintIdValide }),
+      sprints({ limit: 100 }),
+    ]);
   } catch (cause) {
     if (sessionPerdue(cause)) redirect("/admin/connexion");
     return (
@@ -89,6 +108,10 @@ async function Contenu({ searchParams }: Params) {
     );
   }
 
+  const optionsSprints = (listeSprints?.items ?? []).filter(
+    (sp) => sp.status === "ACTIVE" || (sp.enrolledCount ?? 0) > 0,
+  );
+
   return (
     <>
       <div className="mt-[clamp(1.25rem,3svh,2rem)]">
@@ -96,6 +119,8 @@ async function Contenu({ searchParams }: Params) {
           action="/admin/paiements"
           statuts={STATUTS}
           statutActuel={statut}
+          sprints={optionsSprints}
+          sprintActuel={sprintIdValide ? String(sprintIdValide) : undefined}
           nomRecherche="reference"
           valeurRecherche={reference}
           placeholder="Référence Paystack"
@@ -155,12 +180,16 @@ async function Contenu({ searchParams }: Params) {
               page={liste.page}
               limit={liste.limit}
               total={liste.total}
-              parametres={{ statut, reference }}
+              parametres={{
+                statut,
+                reference,
+                sprintId: sprintIdValide ? String(sprintIdValide) : undefined,
+              }}
             />
           </>
         ) : (
           <Vide>
-            {statut || reference
+            {statut || reference || sprintIdValide
               ? "Aucun paiement ne correspond à ce filtre."
               : "Aucun paiement enregistré pour l'instant."}
           </Vide>

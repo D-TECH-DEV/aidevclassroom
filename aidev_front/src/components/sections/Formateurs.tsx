@@ -1,10 +1,13 @@
 "use client";
 
-import Image from "next/image";
-
-import { BadgeSuspendu } from "@/components/formateurs/BadgeSuspendu";
+import { BadgeFormateurDynamique } from "@/components/formateurs/BadgeFormateurDynamique";
 import type { FormateurPublic } from "@/lib/contenu";
 import { Reveal } from "@/components/motion/Reveal";
+import {
+  IconeGithub,
+  IconeLinkedin,
+  IconePortfolio,
+} from "@/components/ui/IconesReseaux";
 
 /**
  * Section — les trois intervenants, un par un.
@@ -48,8 +51,6 @@ import { Reveal } from "@/components/motion/Reveal";
  * Celui de Victorien et les liens ne sont pas fournis : [À COMPLÉTER].
  */
 
-const A_COMPLETER = "[À COMPLÉTER]";
-
 /** Écart entre deux montages de canvas WebGL. Voir `BadgeSuspendu`. */
 const DELAI_BADGE = 260;
 
@@ -82,15 +83,28 @@ function Profil({
     .map((m) => m[0]?.toUpperCase() ?? "")
     .join("");
 
+  const normaliseHref = (url: string) =>
+    /^https?:\/\//i.test(url.trim()) ? url.trim() : `https://${url.trim()}`;
+
   const liens = [
-    formateur.githubUrl ? { libelle: "GitHub", href: formateur.githubUrl } : null,
+    formateur.githubUrl
+      ? { libelle: "GitHub", href: normaliseHref(formateur.githubUrl), Icone: IconeGithub }
+      : null,
     formateur.linkedinUrl
-      ? { libelle: "LinkedIn", href: formateur.linkedinUrl }
+      ? { libelle: "LinkedIn", href: normaliseHref(formateur.linkedinUrl), Icone: IconeLinkedin }
       : null,
     formateur.portfolioUrl
-      ? { libelle: "Portfolio", href: formateur.portfolioUrl }
+      ? { libelle: "Portfolio", href: normaliseHref(formateur.portfolioUrl), Icone: IconePortfolio }
       : null,
-  ].filter((x): x is { libelle: string; href: string } => x !== null);
+  ].filter(
+    (
+      x,
+    ): x is {
+      libelle: string;
+      href: string;
+      Icone: typeof IconeGithub;
+    } => x !== null,
+  );
 
   return (
     // Grille à deux colonnes plutôt qu'une rangée flex : avec `shrink-0`,
@@ -110,32 +124,13 @@ function Profil({
           badgeADroite ? "lg:order-2" : "lg:order-1"
         }`}
       >
-        {formateur.badgePath ? (
-          <BadgeSuspendu
-            frontImage={formateur.badgePath}
-            imageFit="cover"
-            cardColor="#010F06"
-            strapColor="#0A0A0A"
-            size={s.size}
-            strapLength={s.strapLength}
-            breeze={s.breeze}
-            delaiMs={index * DELAI_BADGE}
-          />
-        ) : formateur.photoPath ? (
-          <div className="relative mx-auto h-full max-w-[22rem] overflow-hidden rounded-card border border-accent/30 bg-surface">
-            <Image
-              src={formateur.photoPath}
-              alt={`Portrait de ${nomComplet}`}
-              fill
-              sizes="22rem"
-              className="object-cover object-top"
-            />
-          </div>
-        ) : (
-          <div className="mx-auto grid h-full max-w-[22rem] place-items-center rounded-card border border-accent/30 bg-surface font-mono text-h1 font-bold text-accent">
-            {initiales || "AI"}
-          </div>
-        )}
+        <BadgeFormateurDynamique
+          formateur={formateur}
+          size={s.size}
+          strapLength={s.strapLength}
+          breeze={s.breeze}
+          delaiMs={index * DELAI_BADGE}
+        />
       </div>
 
       <div
@@ -160,12 +155,10 @@ function Profil({
                        border-accent/30 bg-surface lg:hidden"
           >
             {formateur.photoPath ? (
-              <Image
+              <img
                 src={formateur.photoPath}
                 alt={`Portrait de ${nomComplet}`}
-                fill
-                sizes="26vw"
-                className="object-cover object-top"
+                className="h-full w-full object-cover object-top"
               />
             ) : (
               <span className="font-mono text-h3 font-bold text-accent">
@@ -185,34 +178,33 @@ function Profil({
           </div>
         </div>
 
-        <p
-          className={`text-body ${
-            formateur.bio ? "text-fg/70" : "font-mono text-accent/70"
-          }`}
-        >
-          {formateur.bio ?? `${A_COMPLETER} — ce qu'il transmet ce jour-là.`}
-        </p>
+        {formateur.bio?.trim() ? (
+          <div className="flex flex-col gap-1.5">
+            <p className="font-mono text-small uppercase tracking-[0.18em] text-fg/45">
+              À propos de lui
+            </p>
+            <p className="text-body text-fg/75">{formateur.bio.trim()}</p>
+          </div>
+        ) : null}
 
         {liens.length > 0 ? (
-          <div className="flex flex-wrap gap-4 font-mono text-small">
+          <div className="flex flex-wrap gap-3 font-mono text-small">
             {liens.map((l) => (
               <a
                 key={l.libelle}
                 href={l.href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-fg underline decoration-accent/50 underline-offset-4
-                           transition-colors hoverable:hover:text-accent"
+                className="inline-flex items-center gap-2 rounded-pill border border-fg/15
+                           bg-surface/60 px-3.5 py-1.5 text-fg/85 transition-colors
+                           hoverable:hover:border-accent/50 hoverable:hover:text-accent"
               >
-                {l.libelle}
+                <l.Icone className="size-4 shrink-0" />
+                <span>{l.libelle}</span>
               </a>
             ))}
           </div>
-        ) : (
-          <p className="font-mono text-small text-accent/70">
-            {A_COMPLETER} — GitHub, LinkedIn, portfolio
-          </p>
-        )}
+        ) : null}
       </div>
     </Reveal>
   );
@@ -228,7 +220,7 @@ export function Formateurs({ formateurs }: { formateurs: FormateurPublic[] }) {
           </p>
 
           <h2 className="mt-4 max-w-[22ch] text-h1 font-bold leading-[1.05] tracking-tighter">
-            Un trio complet prêt à vous transmettre notre savoir.
+            Un staff complet prêt à vous transmettre notre savoir.
           </h2>
         </Reveal>
 

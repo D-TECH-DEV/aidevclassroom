@@ -43,9 +43,9 @@ export class PaymentAccessGuard implements CanActivate {
         message: 'Paiement introuvable.',
       });
     }
-    const h = req.headers['x-tracking-token'];
+    const h = req.headers?.['x-tracking-token'];
     const header = Array.isArray(h) ? h[0] : h;
-    const q = req.query['trackingToken'];
+    const q = req.query?.['trackingToken'];
     const token = header ?? (typeof q === 'string' ? q : undefined);
     if (!token) {
       throw new UnauthorizedException({

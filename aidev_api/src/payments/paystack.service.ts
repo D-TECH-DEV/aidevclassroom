@@ -212,6 +212,7 @@ export class PaystackService {
   async initializeTransaction(params: PaystackInitParams): Promise<{
     authorizationUrl: string;
     providerReference: string;
+    accessCode?: string;
   }> {
     const res = await fetch(`${this.baseUrl}/transaction/initialize`, {
       method: 'POST',
@@ -228,7 +229,7 @@ export class PaystackService {
     const json = (await res.json()) as {
       status: boolean;
       message: string;
-      data?: { authorization_url: string; reference: string };
+      data?: { authorization_url: string; access_code?: string; reference: string };
     };
     if (!res.ok || !json.status || !json.data?.authorization_url) {
       this.logger.warn(
@@ -240,6 +241,7 @@ export class PaystackService {
     return {
       authorizationUrl: json.data.authorization_url,
       providerReference: json.data.reference,
+      accessCode: json.data.access_code,
     };
   }
 

@@ -1,42 +1,32 @@
-# État de session
+# État de la session
 
-## Tâche réalisée
-1. Consolidation de l'architecture Docker Compose en 3 configurations complètes et autonomes (chacune intégrant son propre service PostgreSQL 16) :
-   - `compose.dev.yml` : environnement unifié dev / test / préprod (profil optionnel `preprod` pour Nginx sur `:8080` / `:8443`).
-   - `compose.prod.yml` : production autonome sur VPS sans Coolify (`postgres`, `backend`, `frontend`, `proxy` Nginx sur `:80` / `:443` + Certbot).
-   - `compose.coolify.yml` : production sur Coolify (`postgres`, `migrate` one-shot Prisma, `backend`, `frontend`, `proxy` sur `expose: ["80"]` sans port hôte ni `container_name` fixe).
-2. Suppression de `compose.preprod.yml` et `.env.preprod.example`.
-3. Mise à niveau des variables d'environnement Paystack : ajout de `PAYSTACK_PUBLIC_KEY` (optionnelle par défaut dans `aidev_api/src/config/env.validation.ts`) et mise à jour de `aidev_api/.env.example`, `.env.dev.example`, `.env.prod.example` et `.env.coolify.example`.
-4. Mise à jour des scripts Bash (`scripts/*.sh`) pour supporter `[dev|prod|coolify]` et de la documentation (`README.md`, `ARCHITECTURE.md`, `deploy/README.md`, `deploy/environments-and-compose.md`).
-
-## Fichiers modifiés, créés et supprimés
-- **Supprimés** : `compose.preprod.yml`, `.env.preprod.example`
-- **Créés** : `compose.coolify.yml`, `.env.coolify.example`
-- **Modifiés** :
-  - `compose.dev.yml`, `compose.prod.yml`
-  - `.env.dev.example`, `.env.prod.example`
-  - `aidev_api/src/config/env.validation.ts`, `aidev_api/.env.example`
-  - `scripts/common.sh`, `scripts/build.sh`, `scripts/start.sh`, `scripts/stop.sh`, `scripts/restart.sh`, `scripts/logs.sh`, `scripts/status.sh`, `scripts/migrate.sh`, `scripts/deploy.sh`, `scripts/ci-deploy.sh`, `scripts/rollback.sh`
-  - `README.md`, `ARCHITECTURE.md`, `deploy/README.md`, `deploy/environments-and-compose.md`
-  - `docs/SESSION.md`
-
-## Résultats des tests et vérifications
-- `docker compose -f compose.dev.yml --env-file .env.dev.example config -q` : succès (code 0).
-- `docker compose -f compose.dev.yml --profile preprod --env-file .env.dev.example config -q` : succès (code 0).
-- `$env:ENV_FILE=".env.prod.example"; docker compose -f compose.prod.yml --env-file .env.prod.example config -q` : succès (code 0).
-- `docker compose -f compose.coolify.yml --env-file .env.coolify.example config -q` : succès (code 0).
-- `bash -n` (Git Bash) sur les 11 scripts `scripts/*.sh` : succès (code 0).
-- `docker exec aidev-api-dev npm test` : 8 suites passées, 100 tests passés.
-- `docker exec aidev-frontend-dev npx tsc --noEmit` : succès (code 0).
-
-## Décisions et raisons
-- **Optionnel `PAYSTACK_PUBLIC_KEY` dans `env.validation.ts`** : le backend et le frontend actuels utilisent Paystack exclusivement en serveur-à-serveur (`PAYSTACK_SECRET_KEY`). Rendre `PAYSTACK_PUBLIC_KEY` optionnelle par défaut évite de casser des déploiements existants tout en garantissant la présence et la validation de la clé dans tous les `.env.*.example`.
-- **Service `proxy` conservé dans `compose.coolify.yml`** : permet d'associer un unique domaine Coolify vers `proxy:80` et de préserver le routage `/api/v1/` (NestJS) vs `/api/` et `/` (Next.js) sans configuration Traefik multiple.
-- **Service one-shot `migrate` dans `compose.coolify.yml`** : garantit l'exécution automatique de `npx prisma migrate deploy` au déploiement Coolify dès que `postgres` est sain, avant le démarrage de `backend`.
-
-## Reste à faire
-- Si besoin en local, ajouter `PAYSTACK_PUBLIC_KEY` dans votre fichier non versionné `.env.dev`.
-- Commiter les changements de restructuration Docker et `aidev_front` sur la branche `fix/revision-logique-paiement-partiel`.
-
-## Pièges connus
-- En déploiement Coolify, associer le domaine sur le service `proxy` (port `80`), et renseigner l'ensemble des variables de `.env.coolify.example` dans l'interface Coolify.
+- **Tâche :** Révision complète de la logique et de l'UX du paiement partiel, ajout du bouton « Compléter mon inscription » (bleu `#0B63F6`) et passage de « Réserver ma place » en vert (`#2EE66B`).
+- **Branche Git :** `fix/revision-logique-paiement-partiel`
+- **Fichiers modifiés / créés :**
+  - Backend :
+    - `aidev_api/prisma/schema.prisma` (`partialTermsAcceptedAt` sur `Enrollment` + suppression contrainte unique absolue `(studentId, sprintId)`)
+    - `aidev_api/prisma/migrations/0006_partial_terms_accepted/migration.sql` et `0007_allow_reenroll_after_cancel/migration.sql`
+    - `aidev_api/src/payments/dto/payment.dto.ts` (`partialTermsAccepted?: boolean`)
+    - `aidev_api/src/payments/payments.controller.ts`
+    - `aidev_api/src/payments/paystack.service.ts` et `payments.service.ts` (retourne `accessCode` de Paystack `POST /transaction/initialize` pour le mode Inline)
+    - `aidev_api/src/sprints/enrolled-count.util.ts` et `aidev_api/src/sprints/sprints.service.ts` (seuls les dossiers `CONFIRMED` / `COMPLETED` ou soldés à 100 % comptent)
+    - `aidev_api/src/enrollments/enrollments.service.ts` et `dto/enrollment.dto.ts` (capacité sur `CONFIRMED`/`COMPLETED`, recherche par e-mail ou téléphone hors `CANCELLED`, abandon des paiements `PENDING` à l'annulation, réinscription autorisée après annulation)
+    - Tests mis à jour : `enrolled-count.util.spec.ts`, `sprints.service.spec.ts`, `payments.service.spec.ts`, `enrollments.service.spec.ts`
+  - Frontend :
+    - `aidev_front/src/components/ui/CtaButton.tsx` (variantes `bleu` et `vert`)
+    - `aidev_front/src/components/inscription/BoutonReserver.tsx` (`variante="vert"`)
+    - `aidev_front/src/components/layout/Navbar.tsx` et `MenuPleinEcran.tsx` (bouton `Compléter mon inscription` bleu ouvrant le popup de complétion)
+    - `aidev_front/src/components/paiement/ModaleReprendrePaiement.tsx` et `BoutonCompleterInscription.tsx` (modale `<dialog>` sur la landing page + repli `/paiement/reprendre`)
+    - `aidev_front/src/app/page.tsx` (montage de `ModaleReprendrePaiement`)
+    - `aidev_front/src/lib/paiement.ts` et `src/types/paystack-inline.d.ts` (`@paystack/inline-js` + `ouvrePopupPaystack` via `resumeTransaction(accessCode)`)
+    - `aidev_front/src/components/inscription/ModaleInscription.tsx` et `ModaleReprendrePaiement.tsx` (modales `fixed inset-0 z-50` compatibles avec l'iframe Paystack Inline)
+    - `aidev_front/src/components/inscription/ChoixPaiementPartiel.tsx` (2 cartes Intégral vs Partiel, saisie acompte, politique 2/3 / non garanti, case obligatoire « Lu et approuvé »)
+    - `aidev_front/src/components/inscription/ChampTelephone.tsx` (indicatif `+225` prérempli et modifiable + formatage `XX XX XX XX XX`)
+    - `aidev_front/src/components/inscription/ParcoursPaiement.tsx` et `FormulaireInscription.tsx`
+    - `aidev_front/src/components/paiement/ReprendrePaiement.tsx` (barre de progression, recherche par e-mail ou téléphone, popup direct sans jargon technique)
+    - `aidev_front/src/lib/admin/types.ts` et `aidev_front/src/components/admin/VoletDetailInscription.tsx` (affichage `partialTermsAcceptedAt` et remboursement 2/3)
+- **Résultat des vérifications :**
+  - `docker exec aidev-api-dev npm test` : 11/11 suites, 111/111 tests passés.
+  - `docker exec aidev-frontend-dev npx tsc --noEmit` : exit code 0.
+  - Conteneurs `aidev-api-dev` et `aidev-frontend-dev` reconstruits et démarrés (`compose.dev.yml`).
+- **Reste à faire :** Vérification visuelle dans le navigateur si souhaitée avant commit/push.

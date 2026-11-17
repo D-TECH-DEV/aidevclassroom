@@ -39,6 +39,7 @@ export function BoutonReserver({
     <CtaButton
       type="button"
       taille={taille}
+      variante="vert"
       pleineLargeur={pleineLargeur}
       className={className}
       onClick={() => {

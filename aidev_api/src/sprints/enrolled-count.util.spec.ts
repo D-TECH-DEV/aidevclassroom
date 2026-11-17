@@ -15,21 +15,28 @@ describe('Comptage des inscrits (minimum verse du sprint)', () => {
     expect(thresholdForEnrollment('DUO', 5000, null)).toBe(5000);
   });
 
-  it('compte un dossier des que le total SUCCESS atteint le minimum', () => {
+  it('ne compte pas un dossier PENDING avec paiement partiel, mais compte un dossier CONFIRMED ou 100% solde', () => {
     expect(
       isEnrolled(
-        { plan: 'SINGLE', status: 'PENDING', payments: [{ status: 'SUCCESS', amountXof: 5000 }] },
+        { plan: 'SINGLE', status: 'PENDING', totalAmountXof: 25000, payments: [{ status: 'SUCCESS', amountXof: 5000 }] },
+        5000,
+        null,
+      ),
+    ).toBe(false);
+    expect(
+      isEnrolled(
+        { plan: 'SINGLE', status: 'PENDING', totalAmountXof: 25000, payments: [{ status: 'SUCCESS', amountXof: 25000 }] },
         5000,
         null,
       ),
     ).toBe(true);
     expect(
       isEnrolled(
-        { plan: 'SINGLE', status: 'PENDING', payments: [{ status: 'SUCCESS', amountXof: 4999 }] },
+        { plan: 'SINGLE', status: 'CONFIRMED', totalAmountXof: 25000, payments: [{ status: 'SUCCESS', amountXof: 5000 }] },
         5000,
         null,
       ),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('seuls les paiements SUCCESS comptent', () => {
@@ -59,12 +66,12 @@ describe('Comptage des inscrits (minimum verse du sprint)', () => {
     ).toBe(false);
   });
 
-  it('un dossier DUO qualifie compte 2 personnes, 1 dossier', () => {
+  it('un dossier DUO qualifie compte 2 personnes, 1 dossier (et un PENDING partiel ne compte pas)', () => {
     const resume = countEnrolled(
       [
-        { plan: 'DUO', status: 'CONFIRMED', payments: [{ status: 'SUCCESS', amountXof: 10000 }] },
-        { plan: 'SINGLE', status: 'PENDING', payments: [{ status: 'SUCCESS', amountXof: 5000 }] },
-        { plan: 'SINGLE', status: 'PENDING', payments: [{ status: 'SUCCESS', amountXof: 1000 }] },
+        { plan: 'DUO', status: 'CONFIRMED', totalAmountXof: 40000, payments: [{ status: 'SUCCESS', amountXof: 40000 }] },
+        { plan: 'SINGLE', status: 'PENDING', totalAmountXof: 25000, payments: [{ status: 'SUCCESS', amountXof: 25000 }] },
+        { plan: 'SINGLE', status: 'PENDING', totalAmountXof: 25000, payments: [{ status: 'SUCCESS', amountXof: 5000 }] },
       ],
       5000,
       10000,

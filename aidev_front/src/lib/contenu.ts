@@ -24,15 +24,17 @@ export type QuestionFaq = {
 export type ContenuSite = {
   whatsappDisplay: string;
   whatsappHref: string;
+  contactEmail: string | null;
   trainers: FormateurPublic[];
   faqs: QuestionFaq[];
 };
 
-const REVALIDATION_SECONDES = 900;
+const REVALIDATION_SECONDES = 0;
 
 export const CONTENU_SITE_VIDE: ContenuSite = {
   whatsappDisplay: "07 04 92 10 80",
   whatsappHref: "https://wa.me/2250704921080",
+  contactEmail: "contact@aidevclassroom.com",
   trainers: [],
   faqs: [],
 };
@@ -51,6 +53,8 @@ export async function recupereContenuSite(): Promise<ContenuSite> {
         data.whatsappDisplay?.trim() || CONTENU_SITE_VIDE.whatsappDisplay,
       whatsappHref:
         data.whatsappHref?.trim() || CONTENU_SITE_VIDE.whatsappHref,
+      contactEmail:
+        data.contactEmail?.trim() || CONTENU_SITE_VIDE.contactEmail,
       trainers: Array.isArray(data.trainers) ? data.trainers : [],
       faqs: Array.isArray(data.faqs) ? data.faqs : [],
     };

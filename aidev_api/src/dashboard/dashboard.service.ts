@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { remainingAmountXof, totalPaidXof } from '../payments/balance.util';
 
 @Injectable()
 export class DashboardService {
@@ -48,6 +49,7 @@ export class DashboardService {
             select: { id: true, firstName: true, lastName: true, email: true },
           },
           sprint: { select: { id: true, name: true, slug: true } },
+          payments: { select: { status: true, amountXof: true } },
         },
       }),
       this.prisma.payment.findMany({
@@ -84,7 +86,11 @@ export class DashboardService {
         count: pendingAgg._count,
         amountXof: pendingAgg._sum.amountXof ?? 0,
       },
-      recentEnrollments,
+      recentEnrollments: recentEnrollments.map((e) => ({
+        ...e,
+        totalPaidXof: totalPaidXof(e.payments),
+        remainingAmountXof: remainingAmountXof(e.totalAmountXof, e.payments),
+      })),
       recentPayments,
     };
   }

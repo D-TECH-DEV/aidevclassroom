@@ -2,6 +2,8 @@ type Commun = {
   children: React.ReactNode;
   /** `sm` pour la navbar, `lg` pour le hero. */
   taille?: "sm" | "lg";
+  /** `bleu` par défaut (#0B63F6) ou `vert` (#2EE66B) pour Réserver ma place. */
+  variante?: "bleu" | "vert";
   /** Occupe toute la largeur disponible — utile dans le menu plein écran. */
   pleineLargeur?: boolean;
   className?: string;
@@ -71,47 +73,44 @@ const Fleche = ({ className }: { className: string }) => (
 export function CtaButton({
   children,
   taille = "lg",
+  variante = "bleu",
   pleineLargeur = false,
   className = "",
   ...rendu
 }: Props) {
-  // Les paddings verticaux suivent la hauteur disponible, comme le reste
-  // du rythme du hero : sur un écran court le bouton se resserre au lieu
-  // de pousser le contenu hors de l'écran.
   const dimensions =
     taille === "sm"
       ? "px-7 py-[clamp(0.5rem,1.6svh,0.875rem)] text-small gap-1"
       : "px-10 py-[clamp(0.75rem,2.4svh,1.375rem)] text-body gap-1";
 
+  const estVert = variante === "vert";
+  const bordure = estVert
+    ? "border-[#2EE66B] text-fg hoverable:hover:text-[#051109]"
+    : "border-cta text-fg";
+  const disque = estVert ? "bg-[#2EE66B]" : "bg-cta";
+
   const classes = `group relative isolate inline-flex shrink-0 items-center
                    ${pleineLargeur ? "w-full" : "w-fit"}
                    justify-center overflow-hidden rounded-pill
-                   border-2 border-cta font-bold text-fg
+                   border-2 font-bold
                    transition-transform duration-[120ms]
                    ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.96]
                    disabled:cursor-not-allowed disabled:opacity-60
-                   ${dimensions} ${className}`;
+                   ${bordure} ${dimensions} ${className}`;
 
   const interieur = (
     <>
       {/* Flèche qui entre par la gauche */}
       <Fleche className="-left-1/4 hoverable:group-hover:left-4" />
 
-      {/* Le disque qui remplit. -z-10 : il passe derrière le texte.
-
-          Sa taille suit celle du bouton au lieu d'être fixe : à 22rem, un
-          bouton en pleine largeur — le menu plein écran, le formulaire —
-          restait noir à ses deux bouts, le disque ne l'atteignait pas.
-          130 % de la largeur couvre la diagonale de n'importe quelle
-          pilule plus large que haute, ce qu'elles sont toutes. */}
       <span
         aria-hidden
-        className="absolute -z-10 aspect-square w-[130%] scale-0
-                   rounded-full bg-cta
+        className={`absolute -z-10 aspect-square w-[130%] scale-0
+                   rounded-full ${disque}
                    transition-transform duration-[160ms]
                    ease-[cubic-bezier(0.23,1,0.32,1)]
                    group-hover:duration-[240ms]
-                   hoverable:group-hover:scale-100"
+                   hoverable:group-hover:scale-100`}
       />
 
       <span

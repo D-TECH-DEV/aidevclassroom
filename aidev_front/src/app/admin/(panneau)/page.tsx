@@ -1,5 +1,14 @@
 import { Suspense } from "react";
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { HugeiconsIcon } from "@hugeicons/react";
+import {
+  Clock01Icon,
+  CreditCardIcon,
+  Rocket01Icon,
+  UserGroupIcon,
+  Wallet01Icon,
+} from "@hugeicons/core-free-icons";
 
 import {
   exigeSession,
@@ -7,27 +16,15 @@ import {
   sessionPerdue,
   traduitAdmin,
 } from "@/lib/admin/api";
-import {
-  date,
-  montant,
-  nomEtudiant,
-  type Paiement,
-  type Inscription,
-} from "@/lib/admin/types";
+import { montant } from "@/lib/admin/types";
 import {
   Alerte,
-  Cadre,
-  Cellule,
-  Ligne,
-  PastilleInscription,
-  PastillePaiement,
+  EnTetePage,
   Surtitre,
-  Tableau,
   TitrePage,
   Tuile,
-  Vide,
 } from "@/components/admin/Briques";
-import { redirect } from "next/navigation";
+import { TableauActiviteRecente } from "@/components/admin/TableauActiviteRecente";
 
 /**
  * `/admin` — le tableau de bord.
@@ -82,118 +79,66 @@ async function Contenu() {
 
   return (
     <>
-      <Surtitre>Vue d&apos;ensemble</Surtitre>
-      <TitrePage>Tableau de bord</TitrePage>
+      <EnTetePage
+        surtitre="Vue d'ensemble"
+        titre="Tableau de bord"
+        description="Activité globale des inscriptions, encaissements et sessions actives."
+        action={
+          <Link
+            href="/admin/sprints"
+            className="inline-flex items-center gap-2 rounded-field border
+                       border-fg/20 bg-surface px-4 py-2 font-mono text-small
+                       text-fg/85 transition-colors hover:border-accent/50 hover:text-fg"
+          >
+            <HugeiconsIcon icon={Rocket01Icon} size={15} className="text-accent" />
+            <span>Gérer les sprints</span>
+          </Link>
+        }
+      />
 
-      <div
-        className="mt-[clamp(1.5rem,4svh,2.5rem)] grid gap-[clamp(0.75rem,2vw,1.25rem)]
-                   [grid-template-columns:repeat(auto-fit,minmax(13rem,1fr))]"
-      >
+      <div className="mt-[clamp(1.5rem,4svh,2.5rem)] grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Tuile
           libelle="Encaissé"
           valeur={montant(donnees.totalCollectedXof)}
           precision="paiements réussis uniquement"
+          icone={<HugeiconsIcon icon={Wallet01Icon} size={16} />}
+          accent
         />
         <Tuile
           libelle="Reste à encaisser"
           valeur={montant(donnees.totalOutstandingXof)}
           precision="inscriptions non annulées"
+          icone={<HugeiconsIcon icon={CreditCardIcon} size={16} />}
         />
         <Tuile
           libelle="Inscriptions"
           valeur={String(donnees.totalEnrollments)}
           precision="hors annulées"
+          icone={<HugeiconsIcon icon={UserGroupIcon} size={16} />}
         />
         <Tuile
           libelle="Participants"
           valeur={String(donnees.totalStudents)}
+          icone={<HugeiconsIcon icon={UserGroupIcon} size={16} />}
         />
         <Tuile
           libelle="Sessions actives"
           valeur={String(donnees.activeSprints)}
+          icone={<HugeiconsIcon icon={Rocket01Icon} size={16} />}
         />
         <Tuile
           libelle="Paiements en attente"
           valeur={String(donnees.pendingPayments?.count ?? 0)}
           precision={montant(donnees.pendingPayments?.amountXof)}
+          icone={<HugeiconsIcon icon={Clock01Icon} size={16} />}
         />
       </div>
 
-      <div className="mt-[clamp(1.5rem,4svh,2.5rem)] flex flex-col gap-[clamp(1rem,3svh,2rem)]">
-        <Cadre
-          titre="Dernières inscriptions"
-          action={
-            <Link
-              href="/admin/inscriptions"
-              className="font-mono text-small text-accent"
-            >
-              Tout voir →
-            </Link>
-          }
-        >
-          {donnees.recentEnrollments?.length ? (
-            <Tableau entetes={["Participant", "Session", "Statut", "Reste", "Date"]}>
-              {donnees.recentEnrollments.map((i: Inscription) => (
-                <Ligne key={i.id}>
-                  <Cellule>
-                    <Link
-                      href={`/admin/inscriptions/${i.id}`}
-                      className="text-fg underline decoration-fg/25 underline-offset-4"
-                    >
-                      {nomEtudiant(i.student)}
-                    </Link>
-                  </Cellule>
-                  <Cellule sourd>{i.sprint?.name ?? "—"}</Cellule>
-                  <Cellule>
-                    <PastilleInscription statut={i.status} />
-                  </Cellule>
-                  <Cellule mono>{montant(i.remainingAmountXof)}</Cellule>
-                  <Cellule mono sourd>
-                    {date(i.createdAt)}
-                  </Cellule>
-                </Ligne>
-              ))}
-            </Tableau>
-          ) : (
-            <Vide>Aucune inscription pour l&apos;instant.</Vide>
-          )}
-        </Cadre>
-
-        <Cadre
-          titre="Derniers paiements"
-          action={
-            <Link
-              href="/admin/paiements"
-              className="font-mono text-small text-accent"
-            >
-              Tout voir →
-            </Link>
-          }
-        >
-          {donnees.recentPayments?.length ? (
-            <Tableau entetes={["Référence", "Montant", "Statut", "Participant", "Payé le"]}>
-              {donnees.recentPayments.map((p: Paiement) => (
-                <Ligne key={p.id}>
-                  <Cellule mono>
-                    <span className="select-all">{p.reference}</span>
-                  </Cellule>
-                  <Cellule mono>{montant(p.amountXof)}</Cellule>
-                  <Cellule>
-                    <PastillePaiement statut={p.status} />
-                  </Cellule>
-                  <Cellule sourd>
-                    {nomEtudiant(p.enrollment?.student)}
-                  </Cellule>
-                  <Cellule mono sourd>
-                    {date(p.paidAt)}
-                  </Cellule>
-                </Ligne>
-              ))}
-            </Tableau>
-          ) : (
-            <Vide>Aucun paiement pour l&apos;instant.</Vide>
-          )}
-        </Cadre>
+      <div className="mt-[clamp(1.5rem,4svh,2.5rem)]">
+        <TableauActiviteRecente
+          inscriptions={donnees.recentEnrollments ?? []}
+          paiements={donnees.recentPayments ?? []}
+        />
       </div>
     </>
   );

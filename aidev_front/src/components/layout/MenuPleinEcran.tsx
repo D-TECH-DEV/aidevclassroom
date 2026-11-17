@@ -5,6 +5,7 @@ import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
 
 import { BoutonReserver } from "@/components/inscription/BoutonReserver";
+import { BoutonCompleterInscription } from "@/components/paiement/BoutonCompleterInscription";
 
 type Ancre = { href: string; label: string };
 
@@ -108,7 +109,11 @@ export function MenuPleinEcran({ ancres }: { ancres: readonly Ancre[] }) {
           </nav>
 
           <div className="shell pb-[calc(1.5rem+env(safe-area-inset-bottom,0rem))]">
-            <div data-entree>
+            <div data-entree className="flex flex-col gap-3">
+              <BoutonCompleterInscription
+                pleineLargeur
+                onAvantOuverture={() => setOuvert(false)}
+              />
               {/* Le menu se referme d'abord : deux couches plein écran
                   l'une sur l'autre, on ne sait plus laquelle répond. */}
               <BoutonReserver

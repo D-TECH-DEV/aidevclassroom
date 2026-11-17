@@ -19,6 +19,7 @@ export interface EnrollablePayment {
 export interface EnrollableRow {
   plan?: string | null;
   status: string;
+  totalAmountXof?: number | null;
   payments: EnrollablePayment[];
 }
 
@@ -44,17 +45,21 @@ export function totalPaidSuccess(payments: EnrollablePayment[]): number {
     .reduce((somme, p) => somme + p.amountXof, 0);
 }
 
-/** Un dossier annule ne compte jamais, quel que soit son solde. */
+/**
+ * Une place n'est confirmee/occupee que lorsque l'adhesion est integralement
+ * soldee (ou explicitement CONFIRMED / COMPLETED).
+ */
 export function isEnrolled(
   row: EnrollableRow,
-  minimumPaymentXof: number,
-  duoMinimumPaymentXof: number | null | undefined,
+  _minimumPaymentXof: number,
+  _duoMinimumPaymentXof: number | null | undefined,
 ): boolean {
   if (row.status === 'CANCELLED') return false;
-  return (
-    totalPaidSuccess(row.payments) >=
-    thresholdForEnrollment(row.plan, minimumPaymentXof, duoMinimumPaymentXof)
-  );
+  if (row.status === 'CONFIRMED' || row.status === 'COMPLETED') return true;
+  if (typeof row.totalAmountXof === 'number') {
+    return totalPaidSuccess(row.payments) >= row.totalAmountXof;
+  }
+  return false;
 }
 
 export interface EnrolledSummary {

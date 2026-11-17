@@ -67,44 +67,64 @@ export function Hero({ edition }: { edition: Edition | null }) {
           >
             <CountdownFlip dateDebut={edition?.dateDebut ?? null} />
 
-            <h1
-            className="max-w-[14ch] text-display font-bold
-                       leading-[0.95] tracking-tighter"
-          >
-            Repars avec ton portfolio{" "}
-            <span
-              className="bg-clip-text text-transparent"
-              style={{ backgroundImage: "var(--gradient-signature)" }}
-            >
-              en ligne
-            </span>
-            .
-          </h1>
+            {edition ? (
+              <div>
+                <h1
+                  className="max-w-[16ch] text-display font-bold
+                             leading-[0.95] tracking-tighter"
+                >
+                  {edition.nom}
+                </h1>
+                {edition.description ? (
+                  <p className="mt-[clamp(0.875rem,2svh,1.25rem)] max-w-[54ch] text-body text-fg/75">
+                    {edition.description}
+                  </p>
+                ) : null}
+              </div>
+            ) : (
+              <div>
+                <h1
+                  className="max-w-[16ch] text-display font-bold
+                             leading-[0.95] tracking-tighter"
+                >
+                  Prochaine session{" "}
+                  <span
+                    className="bg-clip-text text-transparent"
+                    style={{ backgroundImage: "var(--gradient-signature)" }}
+                  >
+                    à venir
+                  </span>
+                  .
+                </h1>
+                <p className="mt-[clamp(0.875rem,2svh,1.25rem)] max-w-[54ch] text-body text-fg/75">
+                  Aucun sprint n&apos;est actif pour le moment. Les inscriptions
+                  ouvriront dès l&apos;annonce de la prochaine session.
+                </p>
+              </div>
+            )}
 
-          {/* Ce qu'on vend : la nature, la durée, l'endroit. Sous le titre
-              et non au-dessus des chiffres — en haut la ligne passait sous
-              la capsule de la navbar et ne se lisait pas. */}
-          <CarteInfos edition={edition} />
+            {/* Ce qu'on vend : la nature, la durée, l'endroit. */}
+            {edition ? <CarteInfos edition={edition} /> : null}
 
-          {/* ── Action, et l'urgence juste à côté ──────────────────── */}
+            {/* ── Action, et l'urgence juste à côté ──────────────────── */}
             <div className="flex flex-col gap-8 lg:flex-row lg:items-center lg:gap-12">
-            <BoutonReserver />
+              <BoutonReserver>
+                {edition ? "Réserver ma place" : "Être informé"}
+              </BoutonReserver>
 
-            {/* Largeur proportionnelle à l'écran, pas un plafond fixe :
-                 une barre de 26rem est trop longue sur un 14 pouces. */}
-            <div className="w-full max-w-[clamp(12rem,24vw,26rem)]">
-              <SeatsGauge
-                sprintId={edition?.id ?? null}
-                inscrits={edition?.inscrits ?? null}
-                quota={edition?.quota ?? null}
-              />
-            </div>
+              {edition ? (
+                <div className="w-full max-w-[clamp(12rem,24vw,26rem)]">
+                  <SeatsGauge
+                    sprintId={edition.id}
+                    inscrits={edition.inscrits}
+                    quota={edition.quota}
+                  />
+                </div>
+              ) : null}
             </div>
           </div>
 
-          {/* Les 4 temps de la journée. Visible à partir de xl :
-              en dessous, le compte à rebours garde toute la largeur. */}
-          <ModulesProgramme modules={edition?.modules} />
+          {edition ? <ModulesProgramme modules={edition.modules} /> : null}
         </div>
 
       </div>

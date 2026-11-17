@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ExportExcelService } from '../common/excel/export-excel.service';
+import { ExportPdfService } from '../common/export/export-pdf.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { PaymentAccessGuard } from './payment-access.guard';
 import {
@@ -12,7 +14,13 @@ import { PaystackService } from './paystack.service';
 @Module({
   imports: [ConfigModule, PrismaModule],
   controllers: [PaymentsController, PaystackWebhookController],
-  providers: [PaymentsService, PaystackService, PaymentAccessGuard],
+  providers: [
+    PaymentsService,
+    PaystackService,
+    PaymentAccessGuard,
+    ExportExcelService,
+    ExportPdfService,
+  ],
   exports: [PaymentsService, PaystackService],
 })
 export class PaymentsModule {}

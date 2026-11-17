@@ -12,7 +12,9 @@
  * ce qui est exactement ce qu'on veut pour un site redéployé à chaque
  * édition.
  */
-export function Footer() {
+import { LogoMarque } from "./LogoMarque";
+
+export function Footer({ contactEmail }: { contactEmail?: string | null }) {
   return (
     <footer className="relative border-t border-fg/10 py-[clamp(1.5rem,4svh,2.5rem)]">
       <div
@@ -20,9 +22,22 @@ export function Footer() {
                    text-center text-small text-fg/50
                    lg:flex-row lg:justify-between lg:text-left"
       >
-        <p className="font-mono text-fg/80">{"{ AIDevClassroom }"}</p>
+        <LogoMarque theme="dark" className="h-6 w-auto" />
 
-        <p>aidevclassroom.com · Yamoussoukro, Côte d&apos;Ivoire</p>
+        <p className="flex flex-wrap items-center justify-center gap-x-2">
+          <span>aidevclassroom.com · Yamoussoukro, Côte d&apos;Ivoire</span>
+          {contactEmail ? (
+            <>
+              <span aria-hidden="true">·</span>
+              <a
+                href={`mailto:${contactEmail}`}
+                className="font-mono text-fg/75 transition-colors hover:text-accent"
+              >
+                {contactEmail}
+              </a>
+            </>
+          ) : null}
+        </p>
 
         <p>© {new Date().getFullYear()} AIDevClassroom</p>
       </div>

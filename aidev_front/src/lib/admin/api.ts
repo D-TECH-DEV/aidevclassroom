@@ -76,6 +76,7 @@ export type FiltresInscriptions = {
   limit?: number;
   statut?: string;
   recherche?: string;
+  sprintId?: number;
 };
 
 export function inscriptions({
@@ -83,10 +84,12 @@ export function inscriptions({
   limit = 20,
   statut,
   recherche,
+  sprintId,
 }: FiltresInscriptions = {}) {
   const q = new URLSearchParams({ page: String(page), limit: String(limit) });
   if (statut) q.set("status", statut);
   if (recherche) q.set("search", recherche);
+  if (sprintId !== undefined) q.set("sprintId", String(sprintId));
   return apiAdmin<Page<Inscription>>(`/admin/enrollments?${q}`);
 }
 
@@ -103,6 +106,7 @@ export type FiltresPaiements = {
   limit?: number;
   statut?: string;
   reference?: string;
+  sprintId?: number;
 };
 
 export function paiements({
@@ -110,10 +114,12 @@ export function paiements({
   limit = 20,
   statut,
   reference,
+  sprintId,
 }: FiltresPaiements = {}) {
   const q = new URLSearchParams({ page: String(page), limit: String(limit) });
   if (statut) q.set("status", statut);
   if (reference) q.set("reference", reference);
+  if (sprintId !== undefined) q.set("sprintId", String(sprintId));
   return apiAdmin<Page<Paiement>>(`/admin/payments?${q}`);
 }
 

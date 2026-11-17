@@ -13,6 +13,8 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { PaymentStatus } from '@prisma/client';
 import type { Request, Response } from 'express';
+import { ExportExcelService } from '../common/excel/export-excel.service';
+import { ExportPdfService } from '../common/export/export-pdf.service';
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -24,7 +26,11 @@ import { PaymentsService } from './payments.service';
 @ApiTags('payments')
 @Controller()
 export class PaymentsController {
-  constructor(private readonly payments: PaymentsService) {}
+  constructor(
+    private readonly payments: PaymentsService,
+    private readonly excel: ExportExcelService,
+    private readonly pdf: ExportPdfService,
+  ) {}
 
   @Post('payments/enrollments/:id/initialize')
   @UseGuards(TrackingTokenGuard)
@@ -35,6 +41,7 @@ export class PaymentsController {
     return this.payments.initialize(id, dto.amountXof, {
       provider: dto.provider,
       phone: dto.phone,
+      partialTermsAccepted: dto.partialTermsAccepted,
     });
   }
 
@@ -52,18 +59,70 @@ export class PaymentsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('enrollmentId') enrollmentId?: string,
+    @Query('sprintId') sprintId?: string,
     @Query('status') status?: PaymentStatus,
     @Query('reference') reference?: string,
   ) {
+    const parsedSprintId = sprintId ? parseInt(sprintId, 10) : undefined;
     return this.payments.listAdmin(
       page ? parseInt(page, 10) : 1,
       limit ? parseInt(limit, 10) : 20,
       {
         enrollmentId: enrollmentId ? parseInt(enrollmentId, 10) : undefined,
+        sprintId: Number.isFinite(parsedSprintId) ? parsedSprintId : undefined,
         status,
         reference,
       },
     );
+  }
+
+  @Get('admin/payments/export')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @ApiBearerAuth('jwt')
+  async exportData(
+    @Res() res: Response,
+    @Query('enrollmentId') enrollmentId?: string,
+    @Query('sprintId') sprintId?: string,
+    @Query('status') status?: PaymentStatus,
+    @Query('reference') reference?: string,
+    @Query('format') format?: string,
+  ) {
+    const parsedEnrollmentId = enrollmentId
+      ? parseInt(enrollmentId, 10)
+      : undefined;
+    const parsedSprintId = sprintId ? parseInt(sprintId, 10) : undefined;
+    const rows = await this.payments.exportAdmin({
+      enrollmentId: Number.isFinite(parsedEnrollmentId)
+        ? parsedEnrollmentId
+        : undefined,
+      sprintId: Number.isFinite(parsedSprintId) ? parsedSprintId : undefined,
+      status,
+      reference,
+    });
+    const filtres = [
+      Number.isFinite(parsedSprintId) ? `Sprint #${parsedSprintId}` : null,
+      status ? `Statut : ${status}` : 'Tous les statuts',
+      reference ? `Référence : ${reference}` : null,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    const dateTag = new Date().toISOString().slice(0, 10);
+    const isPdf = format?.toLowerCase() === 'pdf';
+    const buffer = isPdf
+      ? await this.pdf.exportPayments(rows, filtres)
+      : await this.excel.exportPayments(rows, filtres);
+    res.setHeader(
+      'Content-Type',
+      isPdf
+        ? 'application/pdf'
+        : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="aidevclassroom-paiements-${dateTag}.${isPdf ? 'pdf' : 'xlsx'}"`,
+    );
+    return res.send(buffer);
   }
 
   @Get('admin/payments/:id')

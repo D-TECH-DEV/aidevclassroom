@@ -1,5 +1,9 @@
 import Link from "next/link";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { LinkSquare02Icon, Logout01Icon } from "@hugeicons/core-free-icons";
 
+import { NavigationAdmin } from "@/components/admin/NavigationAdmin";
+import { LogoMarque } from "@/components/layout/LogoMarque";
 import { deconnexion } from "../actions";
 
 /**
@@ -9,24 +13,6 @@ import { deconnexion } from "../actions";
  */
 export const dynamic = "force-dynamic";
 
-/**
- * La coquille des pages connectées : barre de navigation et déconnexion.
- *
- * Elle ne reprend ni la navbar ni le pied de page du site public — ce
- * n'est pas une page de vente, et un « Réserver ma place » n'a rien à
- * faire au-dessus d'une liste d'inscrits.
- *
- * La page de connexion est volontairement en dehors de ce groupe.
- */
-
-const LIENS = [
-  { href: "/admin", libelle: "Tableau de bord" },
-  { href: "/admin/sprints", libelle: "Sprints" },
-  { href: "/admin/inscriptions", libelle: "Inscriptions" },
-  { href: "/admin/paiements", libelle: "Paiements" },
-  { href: "/admin/contenu", libelle: "Contenu vitrine" },
-] as const;
-
 export default function PanneauLayout({
   children,
 }: {
@@ -34,48 +20,68 @@ export default function PanneauLayout({
 }) {
   return (
     <>
-      <header className="border-b border-fg/10">
+      <header
+        className="sticky top-0 z-30 border-b border-fg/10 bg-surface/90
+                   backdrop-blur-md"
+      >
         <div
-          className="mx-auto flex w-full max-w-[90rem] flex-wrap items-center
-                     justify-between gap-4 px-[clamp(1rem,4vw,3rem)] py-4"
+          className="relative mx-auto flex w-full max-w-[90rem] items-center
+                     justify-between gap-3 px-[clamp(1rem,3vw,2.5rem)] py-3.5"
         >
-          <div className="flex flex-wrap items-center gap-[clamp(0.75rem,2.5vw,2rem)]">
+          <div className="flex shrink-0 items-center gap-2.5">
             <Link
               href="/admin"
-              className="font-mono text-small uppercase tracking-[0.25em] text-accent"
+              className="flex items-center gap-2 whitespace-nowrap"
             >
-              AIDevClassroom
+              <LogoMarque theme="dark" className="h-5 w-auto xl:h-6" />
             </Link>
-
-            <nav className="flex flex-wrap items-center gap-[clamp(0.75rem,2vw,1.5rem)]">
-              {LIENS.map((l) => (
-                <Link
-                  key={l.href}
-                  href={l.href}
-                  className="font-mono text-small text-fg/60"
-                >
-                  {l.libelle}
-                </Link>
-              ))}
-            </nav>
+            <span
+              className="hidden rounded-pill border border-fg/15 bg-bg/60 px-2.5
+                         py-0.5 font-mono text-[0.7rem] uppercase tracking-[0.15em]
+                         text-fg/55 2xl:inline-block"
+            >
+              Admin
+            </span>
           </div>
 
-          {/* Un formulaire, pas un lien : se déconnecter écrit quelque
-              chose (le cookie disparaît), donc ça passe par un POST. */}
-          <form action={deconnexion}>
-            <button
-              type="submit"
-              className="rounded-field border border-fg/20 px-3 py-1.5
-                         font-mono text-small text-fg/60 outline-none
-                         focus-visible:border-fg"
+          <NavigationAdmin />
+
+          <div className="flex shrink-0 items-center gap-2">
+            <Link
+              href="/"
+              target="_blank"
+              rel="noreferrer"
+              title="Voir la vitrine"
+              aria-label="Voir la vitrine"
+              className="hidden items-center gap-1.5 rounded-field border
+                         border-fg/15 px-2.5 py-1.5 font-mono text-small
+                         text-fg/65 transition-colors hover:border-fg/35
+                         hover:text-fg sm:inline-flex xl:px-3"
             >
-              Déconnexion
-            </button>
-          </form>
+              <span className="hidden 2xl:inline">Vitrine</span>
+              <HugeiconsIcon icon={LinkSquare02Icon} size={14} />
+            </Link>
+
+            <form action={deconnexion}>
+              <button
+                type="submit"
+                title="Déconnexion"
+                aria-label="Déconnexion"
+                className="inline-flex items-center gap-1.5 rounded-field border
+                           border-fg/20 bg-bg/50 px-2.5 py-1.5 font-mono text-small
+                           text-fg/75 transition-colors outline-none
+                           hover:border-fg/40 hover:text-fg focus-visible:border-fg
+                           xl:px-3"
+              >
+                <HugeiconsIcon icon={Logout01Icon} size={14} />
+                <span className="hidden 2xl:inline">Déconnexion</span>
+              </button>
+            </form>
+          </div>
         </div>
       </header>
 
-      <main className="flex-1 px-[clamp(1rem,4vw,3rem)] py-[clamp(1.5rem,5svh,3rem)]">
+      <main className="flex-1 px-[clamp(1rem,4vw,3rem)] py-[clamp(1.5rem,4.5svh,3rem)]">
         <div className="mx-auto w-full max-w-[90rem]">{children}</div>
       </main>
     </>

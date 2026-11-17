@@ -44,6 +44,7 @@ export type PaiementLance = {
   reference: string;
   status: StatutPaiement;
   authorizationUrl: string;
+  accessCode?: string | null;
 };
 
 /**
@@ -227,14 +228,19 @@ export type DossierRecupere = DossierSuivi & {
  * on le range aussitot dans ce navigateur, qui devient capable de payer
  * le reste. Sans OTP : quiconque connait l'e-mail obtient l'acces.
  */
-export async function retrouveDossiersParEmail(
-  email: string,
-): Promise<DossierRecupere[]> {
+export async function retrouveDossiersParContact(contact: {
+  email?: string;
+  phone?: string;
+}): Promise<DossierRecupere[]> {
+  const payload: { email?: string; phone?: string } = {};
+  if (contact.email) payload.email = contact.email.trim().toLowerCase();
+  if (contact.phone) payload.phone = contact.phone.trim();
+
   const reponse = await api<{ dossiers: DossierRecupere[] }>(
     `/enrollments/by-email`,
     {
       method: "POST",
-      body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      body: JSON.stringify(payload),
       cache: "no-store",
     },
   );
@@ -242,6 +248,12 @@ export async function retrouveDossiersParEmail(
     rangeJetonSuivi(dossier.id, dossier.trackingToken);
   }
   return reponse.dossiers;
+}
+
+export async function retrouveDossiersParEmail(
+  email: string,
+): Promise<DossierRecupere[]> {
+  return retrouveDossiersParContact({ email });
 }
 
 /* ── Appels ──────────────────────────────────────────────────────────── */
@@ -256,11 +268,47 @@ export async function lancePaiement(
   idInscription: number,
   montantXof: number,
   jeton: string,
+  partialTermsAccepted?: boolean,
 ): Promise<PaiementLance> {
   return api<PaiementLance>(`/payments/enrollments/${idInscription}/initialize`, {
     method: "POST",
     jetonSuivi: jeton,
-    body: JSON.stringify({ amountXof: montantXof }),
+    body: JSON.stringify({
+      amountXof: montantXof,
+      ...(partialTermsAccepted ? { partialTermsAccepted: true } : {}),
+    }),
+  });
+}
+
+/**
+ * Ouvre le checkout Paystack Inline (popup sur la page) via `accessCode`,
+ * avec repli sur `authorizationUrl` si `accessCode` est absent.
+ */
+export async function ouvrePopupPaystack(
+  accessCode: string | null | undefined,
+  authorizationUrl: string,
+  callbacks: {
+    onSuccess: (reference?: string) => void;
+    onCancel: () => void;
+    onError?: (erreur: unknown) => void;
+  },
+): Promise<void> {
+  if (!accessCode) {
+    window.location.href = authorizationUrl;
+    return;
+  }
+  const { default: PaystackPop } = await import("@paystack/inline-js");
+  const popup = new PaystackPop();
+  popup.resumeTransaction(accessCode, {
+    onSuccess: (transaction: { reference?: string }) => {
+      callbacks.onSuccess(transaction?.reference);
+    },
+    onCancel: () => {
+      callbacks.onCancel();
+    },
+    onError: (err: { message?: string }) => {
+      callbacks.onError?.(err);
+    },
   });
 }
 
@@ -321,6 +369,9 @@ export function traduitPaiement(erreur: unknown): string {
   switch (erreur.code) {
     case "ENROLLMENT_ALREADY_SETTLED":
       return "Cette inscription est déjà réglée. Il n'y a plus rien à payer.";
+
+    case "PARTIAL_TERMS_REQUIRED":
+      return "Veuillez lire et approuver les conditions du paiement partiel avant de continuer.";
 
     case "PAYMENT_AMOUNT_EXCEEDS_BALANCE":
       return `Le montant dépasse ce qu'il reste à régler. ${SECOURS_WHATSAPP}`;
@@ -449,6 +500,7 @@ export async function initieChargeMobile(
   jeton: string,
   operateur: OperateurMobile,
   telephone: string,
+  partialTermsAccepted?: boolean,
 ): Promise<ChargeLancee> {
   const reponse = await api<Record<string, unknown>>(
     `/payments/enrollments/${idInscription}/initialize`,
@@ -459,6 +511,7 @@ export async function initieChargeMobile(
         amountXof: montantXof,
         provider: operateur,
         phone: telephone,
+        ...(partialTermsAccepted ? { partialTermsAccepted: true } : {}),
       }),
     },
   );

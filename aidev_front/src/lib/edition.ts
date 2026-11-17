@@ -185,14 +185,19 @@ export function versEdition(sprint: Sprint): Edition {
  */
 export async function recupereSprints(): Promise<Edition[]> {
   try {
-    // `GET /sprints` renvoie `ACTIVE` et `INACTIVE`, triés du plus récent
-    // au plus ancien. Le filtre ci-dessous ne garde que ces deux statuts
-    // par prudence, et c'est ici que l'ordre d'affichage se décide.
+    // `GET /sprints` renvoie `ACTIVE` et `INACTIVE`. On priorise :
+    // 1) ACTIVE en cours ou à venir (`endAt >= maintenant`) par date de début croissante (le plus proche d'abord)
+    // 2) ACTIVE déjà terminé (fallback)
+    // 3) INACTIVE ("Bientôt") par date de début croissante
     const page = await api<Page<Sprint>>("/sprints?page=1&limit=20", {
       revalider: 900,
     });
-    const rang = (statut: Edition["statut"]) =>
-      statut === "ACTIVE" ? 0 : 1;
+    const maintenant = Date.now();
+    const rang = (s: Edition) => {
+      if (s.statut !== "ACTIVE") return 2;
+      const finMs = Date.parse(s.dateFin);
+      return Number.isFinite(finMs) && finMs < maintenant ? 1 : 0;
+    };
     return page.items
       .filter(
         (sprint) =>
@@ -201,8 +206,8 @@ export async function recupereSprints(): Promise<Edition[]> {
       .map(versEdition)
       .sort(
         (a, b) =>
-          rang(a.statut) - rang(b.statut) ||
-          +new Date(b.dateDebut) - +new Date(a.dateDebut),
+          rang(a) - rang(b) ||
+          +new Date(a.dateDebut) - +new Date(b.dateDebut),
       );
   } catch (cause) {
     console.error(

@@ -22,6 +22,13 @@ export const metadata: Metadata = {
   description:
     "Formation d'une journée à Yamoussoukro : guider l'IA avec de vraies " +
     "compétences de dev. Le vibe coding, bien fait.",
+  icons: {
+    icon: [
+      { url: "/logo/aidevclassroom-icon.svg", type: "image/svg+xml" },
+      { url: "/logo/aidevclassroom-icon.png", type: "image/png" },
+    ],
+    apple: "/logo/aidevclassroom-icon.png",
+  },
   openGraph: {
     title: "AIDevClassroom #1 — Repars avec ton portfolio en ligne",
     description: "Le vibe coding, bien fait. Formation d'une journée à Yamoussoukro.",

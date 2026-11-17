@@ -54,7 +54,7 @@ describe('SprintsService (CRUD + regles)', () => {
     });
   });
 
-  it('refuse une transition de statut non permise', async () => {
+  it('autorise toutes les transitions entre les 4 statuts de sprint', async () => {
     const svc = new SprintsService(
       makePrisma({
         id: 1,
@@ -63,8 +63,8 @@ describe('SprintsService (CRUD + regles)', () => {
         minimumPaymentXof: 1,
       }) as never,
     );
-    await expect(svc.changeStatus(1, 'COMPLETED')).rejects.toMatchObject({
-      response: expect.objectContaining({ code: 'INVALID_STATUS_TRANSITION' }),
+    await expect(svc.changeStatus(1, 'COMPLETED')).resolves.toMatchObject({
+      status: 'COMPLETED',
     });
   });
 
@@ -110,14 +110,16 @@ describe('SprintsService (CRUD + regles)', () => {
       {
         sprintId: 1,
         plan: 'SINGLE',
-        status: 'PENDING',
-        payments: [{ status: 'SUCCESS', amountXof: 5000 }],
+        status: 'CONFIRMED',
+        totalAmountXof: 25000,
+        payments: [{ status: 'SUCCESS', amountXof: 25000 }],
       },
       {
         sprintId: 1,
         plan: 'SINGLE',
         status: 'PENDING',
-        payments: [{ status: 'SUCCESS', amountXof: 1000 }],
+        totalAmountXof: 25000,
+        payments: [{ status: 'SUCCESS', amountXof: 5000 }],
       },
     ]);
     const svc = new SprintsService(prisma as never);

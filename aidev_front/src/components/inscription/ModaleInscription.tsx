@@ -97,19 +97,27 @@ export function ModaleInscription({
     editions.find((e) => e.id === selectionId) ?? editions[0] ?? null;
 
   useEffect(() => {
-    const element = dialogue.current;
-    if (!element || !ouverte) return;
+    if (!ouverte) return;
 
-    element.showModal();
     arreteDefilement();
+    const surTouche = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setOuverte(false);
+        notifyInscriptionMaj();
+      }
+    };
+    window.addEventListener("keydown", surTouche);
 
     return () => {
-      // `open` est faux quand c'est Échap qui a fermé : rappeler `close()`
-      // lèverait une seconde fois l'événement et on repasserait ici.
-      if (element.open) element.close();
+      window.removeEventListener("keydown", surTouche);
       repartDefilement();
     };
   }, [ouverte]);
+
+  const fermer = useCallback(() => {
+    setOuverte(false);
+    notifyInscriptionMaj();
+  }, []);
 
   const prix = edition
     ? edition.prixDuoFCFA != null
@@ -122,29 +130,21 @@ export function ModaleInscription({
       {children}
 
       {ouverte && (
-        <dialog
-          ref={dialogue}
+        <div
+          role="dialog"
+          aria-modal="true"
           aria-labelledby="titre-inscription"
           data-lenis-prevent
-          // Échap et le bouton de fermeture passent tous les deux par là.
-          onClose={() => {
-            setOuverte(false);
-            notifyInscriptionMaj();
-          }}
-          // Le fond, c'est le `<dialog>` lui-même : tout ce qui est dans
-          // le panneau a celui-ci pour cible, pas l'élément de dialogue.
-          //
-          // D'où l'enveloppe intérieure qui porte le rembourrage : posé
-          // sur le `<dialog>`, un clic dans la marge du panneau aurait eu
-          // le dialogue pour cible et refermé la modale alors qu'on a
-          // cliqué dedans.
           onClick={(e) => {
-            if (e.target === dialogue.current) dialogue.current?.close();
+            if (e.target === e.currentTarget) fermer();
           }}
-          className="modale-inscription m-auto w-[min(100%-2rem,34rem)]
-                     max-h-[min(90svh,48rem)] overflow-y-auto
-                     rounded-card border border-fg/15 bg-bg text-fg"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-bg/80 p-4 backdrop-blur-sm"
         >
+          <div
+            className="w-full max-w-[34rem]
+                       max-h-[min(90svh,48rem)] overflow-y-auto
+                       rounded-card border border-fg/15 bg-bg text-fg shadow-2xl"
+          >
           <div className="p-[clamp(1.25rem,4vw,2.25rem)]">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -167,7 +167,7 @@ export function ModaleInscription({
                 clavier d'un téléphone comme le ferait un champ. */}
               <button
                 type="button"
-                onClick={() => dialogue.current?.close()}
+                onClick={fermer}
                 aria-label="Fermer"
                 className="-mr-2 -mt-2 grid size-11 shrink-0 place-items-center
                          rounded-pill text-fg/60 transition-colors
@@ -252,7 +252,8 @@ export function ModaleInscription({
               )}
             </div>
           </div>
-        </dialog>
+        </div>
+        </div>
       )}
     </ContexteInscription.Provider>
   );

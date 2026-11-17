@@ -24,6 +24,23 @@ function makePrisma(initial: {
   const txApi = {
     // Verrou ligne : SELECT ... FOR UPDATE sur l'inscription (anti-concurrence RG06).
     $queryRaw: jest.fn(async () => []),
+    enrollment: {
+      findUnique: jest.fn(async () =>
+        store.enrollment
+          ? {
+              ...(store.enrollment as unknown as Record<string, unknown>),
+              payments: store.payments.map((p) => ({ ...p })),
+            }
+          : null,
+      ),
+      update: jest.fn(async ({ data }: never) => {
+        store.enrollment = {
+          ...(store.enrollment as unknown as Record<string, unknown>),
+          ...(data as object),
+        } as never;
+        return store.enrollment;
+      }),
+    },
     payment: {
       findMany: jest.fn(async () => store.payments.map((p) => ({ ...p }))),
       findUnique: jest.fn(async ({ where }: never) => {
@@ -52,6 +69,13 @@ function makePrisma(initial: {
     prisma: {
       enrollment: {
         findUnique: jest.fn(async () => store.enrollment),
+        update: jest.fn(async ({ data }: never) => {
+          store.enrollment = {
+            ...(store.enrollment as unknown as Record<string, unknown>),
+            ...(data as object),
+          } as never;
+          return store.enrollment;
+        }),
       },
       payment: {
         findUnique: jest.fn(async ({ where }: never) => {
@@ -138,6 +162,7 @@ const enrollmentBase = {
   id: 1,
   status: 'CONFIRMED',
   totalAmountXof: 50000,
+  partialTermsAcceptedAt: new Date('2026-01-01T00:00:00Z'),
   student: { email: 'amina@example.com' },
   sprint: { minimumPaymentXof: 5000, status: 'ACTIVE' },
   payments: [] as { status: string; amountXof: number }[],
@@ -1499,6 +1524,34 @@ describe('PaymentsService (Paystack moque, RG08-RG12)', () => {
       });
       expect(paystack.chargeMobileMoney).not.toHaveBeenCalled();
       expect(paystack.initializeTransaction).not.toHaveBeenCalled();
+    });
+
+    it('paiement partiel sans approbation des conditions : 400 PARTIAL_TERMS_REQUIRED', async () => {
+      const { prisma } = makePrisma({
+        enrollment: { ...enrollmentBase, status: 'PENDING', partialTermsAcceptedAt: null },
+      });
+      const paystack = dPaystack();
+      await expect(
+        dSvc(prisma, paystack).initialize(1, 10000),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'PARTIAL_TERMS_REQUIRED',
+        }),
+      });
+      expect(paystack.initializeTransaction).not.toHaveBeenCalled();
+    });
+
+    it('paiement partiel avec partialTermsAccepted: true enregistre partialTermsAcceptedAt', async () => {
+      const { prisma, store } = makePrisma({
+        enrollment: { ...enrollmentBase, status: 'PENDING', partialTermsAcceptedAt: null },
+      });
+      const paystack = dPaystack();
+      await dSvc(prisma, paystack).initialize(1, 10000, {
+        partialTermsAccepted: true,
+      });
+      expect(
+        (store.enrollment as unknown as Record<string, unknown>)['partialTermsAcceptedAt'],
+      ).toBeInstanceOf(Date);
     });
   });
 });

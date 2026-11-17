@@ -23,16 +23,16 @@ function safeEqualHex(aHex: string, bHex: string): boolean {
 export interface TrackedRequest {
   params: { id?: string };
   headers: Record<string, string | string[] | undefined>;
-  query: Record<string, unknown>;
-  body: Record<string, unknown>;
+  query?: Record<string, unknown>;
+  body?: Record<string, unknown>;
   enrollmentId?: number;
 }
 
 function extractToken(req: TrackedRequest): string | undefined {
-  const h = req.headers['x-tracking-token'];
+  const h = req.headers?.['x-tracking-token'];
   const header = Array.isArray(h) ? h[0] : h;
-  const q = req.query['trackingToken'];
-  const b = req.body['trackingToken'];
+  const q = req.query?.['trackingToken'];
+  const b = req.body?.['trackingToken'];
   const raw =
     header ??
     (typeof q === 'string' ? q : undefined) ??

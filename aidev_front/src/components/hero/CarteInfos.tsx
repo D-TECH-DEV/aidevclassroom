@@ -111,7 +111,7 @@ function formatDatesEtHeure(
   fin: Date | null,
 ): { date: string; creneau: string } {
   if (!debut || Number.isNaN(debut.getTime())) {
-    return { date: A_DETERMINER, creneau: A_DETERMINER };
+    return { date: "Prochainement", creneau: "À annoncer" };
   }
   const finValide = fin && !Number.isNaN(fin.getTime()) ? fin : null;
   if (finValide && cleJourAbidjan.format(debut) === cleJourAbidjan.format(finValide)) {
@@ -151,8 +151,11 @@ export function CarteInfos({ edition }: { edition: Edition | null }) {
   const debut = edition ? new Date(edition.dateDebut) : null;
   const fin = edition ? new Date(edition.dateFin) : null;
   const { date, creneau } = formatDatesEtHeure(debut, fin);
-  const lieuValeur = edition?.lieu ?? A_DETERMINER;
-  const lieuADet = lieuValeur === A_DETERMINER;
+  const lieuValeur =
+    edition?.lieu && edition.lieu !== A_DETERMINER
+      ? edition.lieu
+      : "Lieu à confirmer";
+  const lieuADet = edition == null || edition.lieu === A_DETERMINER;
 
   const faits: Fait[] = [
     {

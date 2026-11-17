@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
-  Champ,
-  normaliseTelephone,
-} from "@/components/inscription/FormulaireInscription";
+  ChampTelephone,
+  formateNumeroSelonIndicatif,
+} from "@/components/inscription/ChampTelephone";
+import { ChoixPaiementPartiel } from "@/components/inscription/ChoixPaiementPartiel";
+import { normaliseTelephone } from "@/components/inscription/FormulaireInscription";
 import { CtaButton } from "@/components/ui/CtaButton";
 import {
   FENETRE_CHARGE_MS,
@@ -69,6 +71,9 @@ export type DossierAPayer = {
   binome?: string;
   /** Quand le dossier vient d'une reprise : un seul montant possible. */
   resteXof?: number;
+  /** Montant et acceptation éventuellement déjà choisis sur le formulaire. */
+  montantInitial?: number;
+  conditionsPartiellesInitiales?: boolean;
   /** Le numéro saisi à l'inscription, pour pré-remplir l'étape téléphone. */
   telephonePrefill?: string;
 };
@@ -153,8 +158,16 @@ export function ParcoursPaiement({
 
   const [etape, setEtape] = useState<Etape>("moyen");
   const [operateur, setOperateur] = useState<OperateurMobile | null>(null);
-  const [montant, setMontant] = useState<number>(montantUnique);
-  const [telephone, setTelephone] = useState(dossier.telephonePrefill ?? "");
+  const [montant, setMontant] = useState<number>(
+    dossier.montantInitial ?? montantUnique,
+  );
+  const [conditionsPartielles, setConditionsPartielles] = useState(
+    dossier.conditionsPartiellesInitiales ?? false,
+  );
+  const [indicatif, setIndicatif] = useState("+225");
+  const [telephone, setTelephone] = useState(
+    formateNumeroSelonIndicatif(dossier.telephonePrefill ?? "", "+225"),
+  );
   const [erreurTelephone, setErreurTelephone] = useState<string | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
   const [envoi, setEnvoi] = useState(false);
@@ -172,6 +185,8 @@ export function ParcoursPaiement({
     setChargeStockee(derniereCharge(dossier.idInscription));
   }, [dossier.idInscription]);
 
+  const estPartiel = montant < montantUnique;
+  const conditionsManquantes = estPartiel && !conditionsPartielles;
   const montantAffiche = (montant ?? 0).toLocaleString("fr-FR");
   const numeroEtape = etape === "moyen" ? 2 : etape === "telephone" ? 3 : 4;
 
@@ -181,7 +196,7 @@ export function ParcoursPaiement({
     // rentrée ici repart sans rien faire.
     if (envoi || !operateur) return;
 
-    const normalise = normaliseTelephone(telephone);
+    const normalise = normaliseTelephone(`${indicatif} ${telephone}`);
     // Le back n'accepte que l'E.164 ivoirien strict (`225` + 10 chiffres,
     // sans `+`) : tout le reste est refusé avant l'envoi.
     const strict = normalise === null ? null : telephoneChargeStrict(normalise);
@@ -204,6 +219,7 @@ export function ParcoursPaiement({
         dossier.jeton,
         operateur,
         strict,
+        conditionsPartielles,
       );
 
       // Repli automatique : charge désactivée côté serveur, le back rend
@@ -505,45 +521,14 @@ export function ParcoursPaiement({
               </strong>
             </p>
             {dossier.minimumXof < montantUnique ? (
-              <fieldset>
-                <legend className="font-mono text-small uppercase tracking-[0.15em] text-fg/60">
-                  Montant
-                </legend>
-                <div className="mt-2 grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Montant à payer">
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={montant === dossier.minimumXof}
-                    onClick={() => setMontant(dossier.minimumXof)}
-                    className={`rounded-card border px-4 py-3 text-left transition-colors duration-[160ms] ${
-                      montant === dossier.minimumXof
-                        ? "border-accent/60 bg-surface"
-                        : "border-fg/15"
-                    }`}
-                  >
-                    <span className="block text-body font-bold">Réserver ma place</span>
-                    <span className="mt-1 block font-mono text-small text-fg/60">
-                      {dossier.minimumXof.toLocaleString("fr-FR")} FCFA
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={montant === montantUnique}
-                    onClick={() => setMontant(montantUnique)}
-                    className={`rounded-card border px-4 py-3 text-left transition-colors duration-[160ms] ${
-                      montant === montantUnique
-                        ? "border-accent/60 bg-surface"
-                        : "border-fg/15"
-                    }`}
-                  >
-                    <span className="block text-body font-bold">Tout payer</span>
-                    <span className="mt-1 block font-mono text-small text-fg/60">
-                      {montantUnique.toLocaleString("fr-FR")} FCFA
-                    </span>
-                  </button>
-                </div>
-              </fieldset>
+              <ChoixPaiementPartiel
+                minimumXof={dossier.minimumXof}
+                resteXof={montantUnique}
+                montant={montant}
+                onChangeMontant={setMontant}
+                conditionsAcceptees={conditionsPartielles}
+                onChangeConditions={setConditionsPartielles}
+              />
             ) : null}
           </>
         )}
@@ -560,12 +545,12 @@ export function ParcoursPaiement({
             <CtaButton
               type="button"
               onClick={() => {
-                if (operateur) {
+                if (operateur && !conditionsManquantes) {
                   setErreur(null);
                   setEtape("telephone");
                 }
               }}
-              disabled={!operateur}
+              disabled={!operateur || conditionsManquantes}
               pleineLargeur
             >
               {`Suivant — ${montantAffiche} FCFA`}
@@ -612,19 +597,21 @@ export function ParcoursPaiement({
           ton téléphone, et c&apos;est réglé.
         </p>
 
-        <Champ
+        <ChampTelephone
           nom="telephone"
           etiquette="Numéro à débiter"
-          aide="Dix chiffres suffisent, on ajoute le +225."
+          indicatif={indicatif}
+          onChangeIndicatif={(ind) => {
+            setIndicatif(ind);
+            setErreurTelephone(null);
+          }}
           valeur={telephone}
           onChange={(valeur) => {
             setTelephone(valeur);
             setErreurTelephone(null);
           }}
           erreur={erreurTelephone ?? undefined}
-          type="tel"
-          inputMode="tel"
-          autoComplete="tel"
+          autoComplete="tel-national"
           placeholder="07 04 92 10 80"
         />
 

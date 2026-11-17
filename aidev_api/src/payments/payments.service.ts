@@ -32,6 +32,7 @@ import {
 export interface InitializeOptions {
   provider?: string;
   phone?: string;
+  partialTermsAccepted?: boolean;
 }
 
 function newReference(): string {
@@ -181,6 +182,20 @@ export class PaymentsService {
           : 400;
       const Ex = status === 409 ? ConflictException : BadRequestException;
       throw new Ex({ code: err, message: AMOUNT_ERROR_MESSAGES[err] });
+    }
+
+    if (amountXof < remaining && !enrollment.partialTermsAcceptedAt) {
+      if (!opts?.partialTermsAccepted) {
+        throw new BadRequestException({
+          code: 'PARTIAL_TERMS_REQUIRED',
+          message:
+            'Veuillez lire et approuver les conditions du paiement partiel avant de continuer.',
+        });
+      }
+      await this.prisma.enrollment.update({
+        where: { id: enrollment.id },
+        data: { partialTermsAcceptedAt: new Date() },
+      });
     }
 
     const currency = this.config.get<string>('PAYSTACK_CURRENCY') ?? 'XOF';
@@ -358,6 +373,7 @@ export class PaymentsService {
         reference: updated.reference,
         status: updated.status,
         authorizationUrl: updated.authorizationUrl,
+        accessCode: init.accessCode ?? null,
       };
     } catch (e) {
       this.logger.warn(
@@ -582,7 +598,7 @@ export class PaymentsService {
         });
       }
       if (fresh.status === 'SUCCESS') return fresh;
-      return tx.payment.update({
+      const done = await tx.payment.update({
         where: { id: payment.id },
         data: {
           status: 'SUCCESS',
@@ -590,6 +606,21 @@ export class PaymentsService {
           providerResponse: this.mergedProviderResponse(payment, data),
         },
       });
+      const parent = await tx.enrollment.findUnique({
+        where: { id: payment.enrollmentId },
+        include: { payments: { select: { status: true, amountXof: true } } },
+      });
+      if (
+        parent &&
+        parent.status === 'PENDING' &&
+        remainingAmountXof(parent.totalAmountXof, parent.payments) === 0
+      ) {
+        await tx.enrollment.update({
+          where: { id: parent.id },
+          data: { status: 'CONFIRMED' },
+        });
+      }
+      return done;
     });
     return this.withBalance(updated);
   }
@@ -820,6 +851,7 @@ export class PaymentsService {
     limit = 20,
     filters: {
       enrollmentId?: number;
+      sprintId?: number;
       status?: PaymentStatus;
       reference?: string;
     } = {},
@@ -828,6 +860,9 @@ export class PaymentsService {
     const skip = (Math.max(page, 1) - 1) * take;
     const where: Prisma.PaymentWhereInput = {
       ...(filters.enrollmentId ? { enrollmentId: filters.enrollmentId } : {}),
+      ...(filters.sprintId
+        ? { enrollment: { sprintId: filters.sprintId } }
+        : {}),
       ...(filters.status ? { status: filters.status } : {}),
       ...(filters.reference
         ? {
@@ -863,6 +898,51 @@ export class PaymentsService {
       this.prisma.payment.count({ where }),
     ]);
     return { items, total, page: Math.floor(skip / take) + 1, limit: take };
+  }
+
+  async exportAdmin(
+    filters: {
+      enrollmentId?: number;
+      sprintId?: number;
+      status?: PaymentStatus;
+      reference?: string;
+    } = {},
+  ) {
+    const where: Prisma.PaymentWhereInput = {
+      ...(filters.enrollmentId ? { enrollmentId: filters.enrollmentId } : {}),
+      ...(filters.sprintId
+        ? { enrollment: { sprintId: filters.sprintId } }
+        : {}),
+      ...(filters.status ? { status: filters.status } : {}),
+      ...(filters.reference
+        ? {
+            OR: [
+              { reference: { contains: filters.reference } },
+              { providerReference: { contains: filters.reference } },
+            ],
+          }
+        : {}),
+    };
+    return this.prisma.payment.findMany({
+      where,
+      take: 5000,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        enrollment: {
+          include: {
+            student: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+              },
+            },
+            sprint: { select: { id: true, name: true, slug: true } },
+          },
+        },
+      },
+    });
   }
 
   async detailAdmin(id: number) {

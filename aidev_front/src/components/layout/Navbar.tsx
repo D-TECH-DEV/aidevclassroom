@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 
 import { BoutonReserver } from "@/components/inscription/BoutonReserver";
+import { BoutonCompleterInscription } from "@/components/paiement/BoutonCompleterInscription";
 import { usePlacesSprint } from "@/lib/usePlacesSprint";
+import { LogoMarque } from "./LogoMarque";
 import { MenuPleinEcran } from "./MenuPleinEcran";
 
 const ANCRES = [
@@ -78,10 +80,10 @@ export function Navbar({
           >
             <a
               href="#top"
-              className="text-h3 font-bold tracking-tight text-fg"
+              className="inline-flex items-center"
               aria-label="AIDevClassroom, retour en haut"
             >
-              <span className="text-accent">AI</span>DevClassroom
+              <LogoMarque theme="dark" className="h-7 w-auto" />
             </a>
 
             {/* La capsule du centre : sombre, floutée, arrondie. */}
@@ -113,7 +115,8 @@ export function Navbar({
             {/* La visibilité est portée par l'enveloppe, pas par le bouton :
                 un `hidden` passé en className ne gagne pas à coup sûr contre
                 le `inline-flex` de base — l'ordre dépend du CSS généré. */}
-            <div className="hidden lg:block">
+            <div className="hidden items-center gap-2 lg:flex">
+              <BoutonCompleterInscription taille="sm" />
               <BoutonReserver taille="sm" />
             </div>
 
