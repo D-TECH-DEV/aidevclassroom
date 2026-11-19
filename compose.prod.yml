@@ -120,6 +120,8 @@ services:
       target: prod
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://ai-devclassroom.com}
+        NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION: ${NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION:-}
         NEXT_PUBLIC_PAYSTACK_CHARGE_ENABLED: ${NEXT_PUBLIC_PAYSTACK_CHARGE_ENABLED:-1}
     image: aidev-frontend:${FRONTEND_VERSION:-latest}
     container_name: aidev-frontend-prod

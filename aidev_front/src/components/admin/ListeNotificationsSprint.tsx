@@ -10,6 +10,7 @@ import { Cadre, Cellule, Ligne, Pagination, Tableau, Vide } from "./Briques";
 
 const LIBELLE_TYPE: Record<SprintNotificationItem["kind"], string> = {
   SCHEDULE_OR_LOCATION_UPDATED: "Mise à jour date / lieu",
+  PRICE_UPDATED: "Mise à jour tarifaire",
   POSTPONED_OR_SUSPENDED: "Report / suspension",
   SESSION_REACTIVATED: "Ouverture / reprise",
   SELECTION_SELECTED: "Sélection — Retenus",

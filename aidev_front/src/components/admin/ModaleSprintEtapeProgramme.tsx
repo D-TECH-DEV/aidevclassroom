@@ -6,9 +6,9 @@ import { LIBELLE_SPRINT, type Sprint } from "@/lib/admin/types";
 import { CHAMP_CLS, ETIQUETTE_CLS } from "./ModaleSprintEtapes";
 
 const ETAPES = [
-  { numero: 1, titre: "Identité & Calendrier" },
+  { numero: 1, titre: "Identité & Dates" },
   { numero: 2, titre: "Tarifs Solo & Duo" },
-  { numero: 3, titre: "Programme & Publication" },
+  { numero: 3, titre: "Programme & Statut" },
 ] as const;
 
 export function BarreEtapesModale({
@@ -203,7 +203,7 @@ export function EtapeProgramme({
                     Notifier par e-mail les inscrits (avec acompte payé)
                   </span>
                   <span className="font-mono text-small text-fg/50">
-                    Un e-mail est envoyé uniquement si la date, la ville ou le lieu a changé.
+                    Un e-mail est envoyé si la date, la ville, le lieu ou les tarifs (Solo / Duo) changent.
                   </span>
                 </span>
               </label>

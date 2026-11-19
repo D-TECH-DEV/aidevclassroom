@@ -478,7 +478,7 @@ export function ReprendrePaiement({ onFermer }: { onFermer?: () => void } = {}) 
     );
   }
 
-  function BlocEmail({ titre, description }: { titre: string; description: string }) {
+  function rendBlocEmail({ titre, description }: { titre: string; description: string }) {
     if (etapeOtp === "code") {
       return (
         <form
@@ -737,10 +737,11 @@ export function ReprendrePaiement({ onFermer }: { onFermer?: () => void } = {}) 
             )}
           </div>
         ) : null}
-        <BlocEmail
-          titre="Retrouver mon inscription"
-          description="Saisis l'adresse e-mail ou le numéro de téléphone utilisé lors de ton inscription pour compléter ton paiement."
-        />
+        {rendBlocEmail({
+          titre: "Retrouver mon inscription",
+          description:
+            "Saisis l'adresse e-mail ou le numéro de téléphone utilisé lors de ton inscription pour compléter ton paiement.",
+        })}
       </div>
     );
   }
@@ -757,10 +758,11 @@ export function ReprendrePaiement({ onFermer }: { onFermer?: () => void } = {}) 
           onPaie={() => ouvreChoixMontant(dossier)}
         />
       ))}
-      <BlocEmail
-        titre="Un autre dossier ?"
-        description="Saisis l'e-mail d'une autre inscription pour la retrouver ici."
-      />
+      {rendBlocEmail({
+        titre: "Un autre dossier ?",
+        description:
+          "Saisis l'e-mail d'une autre inscription pour la retrouver ici.",
+      })}
     </div>
   );
 }
