@@ -1,0 +1,3 @@
+ALTER TABLE "sprint_notifications"
+  ADD COLUMN "status" VARCHAR(20) NOT NULL DEFAULT 'COMPLETED',
+  ADD COLUMN "total_recipients" INTEGER NOT NULL DEFAULT 0;

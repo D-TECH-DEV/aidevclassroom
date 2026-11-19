@@ -9,7 +9,7 @@ Basé sur [payments.service.ts](../../src/payments/payments.service.ts),
 [payments.controller.ts](../../src/payments/payments.controller.ts),
 [env.validation.ts](../../src/config/env.validation.ts) côté back, et
 `ParcoursPaiement.tsx`, `ReprendrePaiement.tsx`, `lib/paiement.ts` côté
-site (voir `aidevsprint/src/...`).
+site (voir `aidev_front/src/...`).
 
 ## Le parcours en 6 étapes (même modale, sans redirection)
 

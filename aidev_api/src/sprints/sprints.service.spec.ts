@@ -17,7 +17,10 @@ function makePrisma(sprint: unknown = null, enrollCount = 0) {
       })),
       delete: jest.fn(async () => ({ id: 1 })),
     },
-    enrollment: { count: jest.fn(async () => enrollCount) },
+    enrollment: {
+      count: jest.fn(async () => enrollCount),
+      findMany: jest.fn(async () => []),
+    },
   };
 }
 
@@ -51,7 +54,7 @@ describe('SprintsService (CRUD + regles)', () => {
     });
   });
 
-  it('refuse une transition de statut non permise', async () => {
+  it('autorise toutes les transitions entre les 4 statuts de sprint', async () => {
     const svc = new SprintsService(
       makePrisma({
         id: 1,
@@ -60,8 +63,8 @@ describe('SprintsService (CRUD + regles)', () => {
         minimumPaymentXof: 1,
       }) as never,
     );
-    await expect(svc.changeStatus(1, 'COMPLETED')).rejects.toMatchObject({
-      response: expect.objectContaining({ code: 'INVALID_STATUS_TRANSITION' }),
+    await expect(svc.changeStatus(1, 'COMPLETED')).resolves.toMatchObject({
+      status: 'COMPLETED',
     });
   });
 
@@ -81,6 +84,80 @@ describe('SprintsService (CRUD + regles)', () => {
       makePrisma({ id: 1, status: 'DRAFT' }) as never,
     );
     await expect(svc.detailPublic(1)).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'SPRINT_NOT_FOUND' }),
+    });
+  });
+
+  it('catalogue public : chaque sprint porte enrolledCount et enrolledSeats', async () => {
+    const prisma = makePrisma({
+      id: 1,
+      status: 'ACTIVE',
+      minimumPaymentXof: 5000,
+      duoMinimumPaymentXof: null,
+    }) as unknown as {
+      sprint: { findMany: jest.Mock };
+      enrollment: { findMany: jest.Mock };
+    };
+    prisma.sprint.findMany.mockResolvedValue([
+      {
+        id: 1,
+        status: 'ACTIVE',
+        minimumPaymentXof: 5000,
+        duoMinimumPaymentXof: null,
+      },
+    ]);
+    prisma.enrollment.findMany.mockResolvedValue([
+      {
+        sprintId: 1,
+        plan: 'SINGLE',
+        status: 'CONFIRMED',
+        totalAmountXof: 25000,
+        payments: [{ status: 'SUCCESS', amountXof: 25000 }],
+      },
+      {
+        sprintId: 1,
+        plan: 'SINGLE',
+        status: 'PENDING',
+        totalAmountXof: 25000,
+        payments: [{ status: 'SUCCESS', amountXof: 5000 }],
+      },
+    ]);
+    const svc = new SprintsService(prisma as never);
+    const page = await svc.listPublic();
+    expect(page.items[0]).toMatchObject({
+      enrolledCount: 1,
+      enrolledSeats: 1,
+    });
+  });
+
+  it('compteur public : 404 hors catalogue, seuils par forfait', async () => {
+    const prisma = makePrisma({
+      id: 1,
+      status: 'ACTIVE',
+      minimumPaymentXof: 5000,
+      duoMinimumPaymentXof: 10000,
+      capacity: 60,
+    }) as unknown as {
+      sprint: { findUnique: jest.Mock };
+      enrollment: { findMany: jest.Mock };
+    };
+    prisma.enrollment.findMany.mockResolvedValue([
+      {
+        sprintId: 1,
+        plan: 'DUO',
+        status: 'CONFIRMED',
+        payments: [{ status: 'SUCCESS', amountXof: 10000 }],
+      },
+    ]);
+    const svc = new SprintsService(prisma as never);
+    await expect(svc.countEnrolled(1)).resolves.toMatchObject({
+      sprintId: 1,
+      enrolledCount: 1,
+      enrolledSeats: 2,
+      capacity: 60,
+    });
+    const brouillon = makePrisma({ id: 2, status: 'DRAFT' }) as never;
+    await expect(new SprintsService(brouillon).countEnrolled(2)).rejects.toMatchObject({
       response: expect.objectContaining({ code: 'SPRINT_NOT_FOUND' }),
     });
   });
@@ -110,6 +187,44 @@ describe('SprintsService (CRUD + regles)', () => {
       }),
     ).rejects.toMatchObject({
       response: expect.objectContaining({ code: 'DUO_MINIMUM_EXCEEDS_PRICE' }),
+    });
+  });
+
+  it('persiste ville, lieu, format, niveau et normalise les modules', async () => {
+    const prisma = makePrisma({
+      id: 1,
+      status: 'ACTIVE',
+      priceXof: 50000,
+      minimumPaymentXof: 5000,
+      startAt: new Date(dto.startAt),
+      endAt: new Date(dto.endAt),
+    }) as unknown as {
+      sprint: { create: jest.Mock; update: jest.Mock };
+    };
+    const svc = new SprintsService(prisma as never);
+    const created = await svc.create({
+      ...dto,
+      slug: 'sprint-dynamique',
+      city: '  Abidjan  ',
+      location: '  Plateau  ',
+      format: ' 2 jours ',
+      level: ' Intermediaire ',
+      modules: ['  Design  ', '  ', 'Deploiement'],
+    });
+    expect(created).toMatchObject({
+      city: 'Abidjan',
+      location: 'Plateau',
+      format: '2 jours',
+      level: 'Intermediaire',
+      modules: ['Design', 'Deploiement'],
+    });
+
+    const updated = await svc.update(1, {
+      city: '',
+      modules: [],
+    });
+    expect(updated).toMatchObject({
+      city: null,
     });
   });
 });

@@ -18,7 +18,7 @@ export class CreateAdminDto {
   email!: string;
 
   @IsString()
-  @MinLength(8, { message: '8 caracteres minimum.' })
+  @MinLength(12, { message: '12 caracteres minimum.' })
   @MaxLength(128)
   password!: string;
 }

@@ -39,7 +39,7 @@ export class StudentsController {
   ) {
     return this.students.listAdmin(
       page ? parseInt(page, 10) : 1,
-      limit ? parseInt(limit, 10) : 20,
+      limit ? parseInt(limit, 10) : 50,
       search,
     );
   }

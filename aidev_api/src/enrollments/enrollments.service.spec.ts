@@ -14,6 +14,7 @@ function makePrisma(
         Array.from({ length: seats }, () => ({ plan: 'SINGLE' })),
       ),
       findUnique: jest.fn(async () => opts.existing ?? null),
+      findFirst: jest.fn(async () => opts.existing ?? null),
       create: jest.fn(async ({ data }: never) => {
         const row = { id: 1, ...(data as object) };
         created.push(row);
@@ -250,6 +251,44 @@ describe('EnrollmentsService (RG01/RG04/RG13/RG14)', () => {
       dossiers: [],
     });
     expect(prisma.enrollment.findMany).not.toHaveBeenCalled();
+  });
+
+  it('retrouve par telephone et re-emet un jeton', async () => {
+    const prisma = {
+      student: { findMany: jest.fn(async () => [{ id: 12 }]) },
+      enrollment: {
+        findMany: jest.fn(async () => [
+          {
+            id: 8,
+            studentId: 12,
+            trackingTokenHash: 'ancien',
+            totalAmountXof: 50000,
+            payments: [{ status: 'SUCCESS', amountXof: 15000 }],
+            sprint: { id: 1, name: 'S1', minimumPaymentXof: 5000 },
+          },
+        ]),
+        update: jest.fn(async () => ({})),
+      },
+    };
+    const svc = new EnrollmentsService(prisma as never);
+    const out = await svc.findByContact(undefined, '+2250704921080');
+    expect(out.dossiers).toHaveLength(1);
+    expect(out.dossiers[0]).toMatchObject({ remainingAmountXof: 35000 });
+  });
+
+  it('findByContact exclut les dossiers CANCELLED', async () => {
+    const prisma = {
+      student: { findUnique: jest.fn(async () => ({ id: 12 })) },
+      enrollment: { findMany: jest.fn(async () => []) },
+    };
+    const svc = new EnrollmentsService(prisma as never);
+    const out = await svc.findByContact('annule@example.com');
+    expect(out.dossiers).toEqual([]);
+    expect(prisma.enrollment.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ status: { not: 'CANCELLED' } }),
+      }),
+    );
   });
 
   it('cloture COMPLETED exige un solde nul (RG07)', async () => {

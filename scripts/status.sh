@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # État des services et contrôles de santé — Aidev Classroom
-# Usage : ./scripts/status.sh [dev|preprod|prod]
+# Usage : ./scripts/status.sh [dev|prod|coolify]
 # ==============================================================================
 set -Eeuo pipefail
 

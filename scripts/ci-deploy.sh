@@ -14,8 +14,8 @@
 #   6. En cas d'echec : retour arriere applicatif NON interactif vers les
 #      images precedentes, reverification, sortie en erreur explicite.
 #
-# PostgreSQL reste externe : aucun service PG ici, aucun volume touche,
-# aucune commande destructive (pas de `down -v`, pas de `prune --volumes`).
+# Les volumes PostgreSQL sont persistants : aucune commande destructive
+# (pas de `down -v`, pas de `prune --volumes`).
 # ==============================================================================
 set -Eeuo pipefail
 
@@ -33,7 +33,7 @@ if [[ "$ENV_NAME" != "prod" ]]; then
 fi
 
 HTTP_PORT="$(grep -E '^HTTP_PORT=' "$ENV_FILE" | cut -d= -f2 || true)"
-HTTP_PORT="${HTTP_PORT:-8081}"
+HTTP_PORT="${HTTP_PORT:-80}"
 BASE_URL="http://127.0.0.1:${HTTP_PORT}"
 
 # -- Images precedentes (retour arriere) --------------------------------------

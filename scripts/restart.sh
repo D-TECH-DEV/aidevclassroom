@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # Redémarrage des services — Aidev Classroom
-# Usage : ./scripts/restart.sh [dev|preprod|prod] [service_optionnel]
+# Usage : ./scripts/restart.sh [dev|prod|coolify] [service_optionnel]
 # ==============================================================================
 set -Eeuo pipefail
 

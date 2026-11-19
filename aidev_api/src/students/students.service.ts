@@ -27,25 +27,27 @@ export function normalizeStudentInput<
 export class StudentsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** Creation publique / retrouvailles : ne revele jamais si l'e-mail existe deja. */
+  /** Creation publique : ne revele jamais aucune PII ni l'existence d'un e-mail. */
   async register(data: {
     firstName: string;
     lastName: string;
     email: string;
     phone: string;
-  }) {
+  }): Promise<{ id: number }> {
     const n = normalizeStudentInput(data);
     const existing = await this.prisma.student.findUnique({
       where: { email: n.email },
+      select: { id: true },
     });
     if (existing) {
-      // Dedoublonnage V1 : on retourne le participant existant sans
-      // reveler publiquement plus que necessaire (pas de 409).
-      return { student: existing, created: false };
+      return { id: existing.id };
     }
     try {
-      const student = await this.prisma.student.create({ data: n });
-      return { student, created: true };
+      const student = await this.prisma.student.create({
+        data: n,
+        select: { id: true },
+      });
+      return { id: student.id };
     } catch (e) {
       if (
         e instanceof Prisma.PrismaClientKnownRequestError &&
@@ -53,26 +55,34 @@ export class StudentsService {
       ) {
         const found = await this.prisma.student.findUnique({
           where: { email: n.email },
+          select: { id: true },
         });
-        return { student: found!, created: false };
+        return { id: found!.id };
       }
       throw e;
     }
   }
 
-  async listAdmin(page = 1, limit = 20, search?: string) {
+  async listAdmin(page = 1, limit = 50, search?: string) {
     const take = Math.min(Math.max(limit, 1), 100);
     const skip = (Math.max(page, 1) - 1) * take;
-    const where: Prisma.StudentWhereInput = search
-      ? {
-          OR: [
-            { firstName: { contains: search } },
-            { lastName: { contains: search } },
-            { email: { contains: search } },
-            { phone: { contains: search } },
-          ],
-        }
-      : {};
+    const tokens = (search ?? '')
+      .trim()
+      .split(/\s+/)
+      .filter((t) => t.length > 0);
+    const where: Prisma.StudentWhereInput =
+      tokens.length > 0
+        ? {
+            AND: tokens.map((token) => ({
+              OR: [
+                { firstName: { contains: token, mode: 'insensitive' } },
+                { lastName: { contains: token, mode: 'insensitive' } },
+                { email: { contains: token, mode: 'insensitive' } },
+                { phone: { contains: token, mode: 'insensitive' } },
+              ],
+            })),
+          }
+        : {};
     const [items, total] = await Promise.all([
       this.prisma.student.findMany({
         where,

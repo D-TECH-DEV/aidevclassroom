@@ -42,10 +42,11 @@ Préfixe `/admins`, tout JWT `ADMIN`.
 
 | Méthode | Chemin | Auth | Body / Query | Notes |
 |---|---|---|---|---|
-| `GET` | `/sprints?page&limit` | non | — | `ACTIVE` uniquement |
+| `GET` | `/sprints?page&limit` | non | — | `ACTIVE` + `INACTIVE`, chaque item porte `enrolledCount` / `enrolledSeats` |
 | `GET` | `/admin/sprints?page&limit&status` | ADMIN | `status?` enum | tous statuts par défaut |
 | `GET` | `/admin/sprints/:id` | ADMIN | — | fiche complète (édition) ; `404` |
-| `GET` | `/sprints/:id` | non | — | `404` si non-`ACTIVE` ou inconnu |
+| `GET` | `/sprints/:id` | non | — | `ACTIVE` + compteurs ; `404` si non-`ACTIVE` ou inconnu |
+| `GET` | `/sprints/:id/enrolled-count` | non | — | `{ sprintId, enrolledCount, enrolledSeats, capacity }` ; `404` si hors catalogue |
 | `POST` | `/sprints` | ADMIN | `CreateSprintDto` complet | `409 SLUG_EXISTS`, `400 MINIMUM_EXCEEDS_PRICE / INVALID_DATES` |
 | `PATCH` | `/sprints/:id` | ADMIN | `UpdateSprintDto` (sans `slug`/`status`) | champ inconnu → `400` |
 | `PATCH` | `/sprints/:id/status` | ADMIN | `{ status: enum }` | `400 INVALID_STATUS_TRANSITION` |

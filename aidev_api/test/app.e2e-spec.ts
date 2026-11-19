@@ -205,15 +205,20 @@ describe('Paiements Charge (Paystack moque, LOT D)', () => {
   let seq = 1;
 
   async function creerLigne({ data }: never) {
+    const input = data as Pick<
+      Ligne,
+      'enrollmentId' | 'amountXof' | 'currency' | 'reference' | 'status'
+    > &
+      Partial<Ligne>;
     const ligne: Ligne = {
-      id: seq++,
       providerReference: null,
       authorizationUrl: null,
       providerResponse: null,
       paidAt: null,
+      ...input,
+      id: seq++,
       createdAt: new Date(),
       updatedAt: new Date(),
-      ...(data as Omit<Ligne, 'id' | 'createdAt' | 'updatedAt'>),
     };
     lignes.push(ligne);
     return { ...ligne };
