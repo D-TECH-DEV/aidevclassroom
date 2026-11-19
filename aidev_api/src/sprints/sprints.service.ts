@@ -6,9 +6,13 @@ import {
   Optional,
 } from '@nestjs/common';
 import { Prisma, SprintStatus } from '@prisma/client';
-import { formatDateAbidjan } from '../common/export/export-format.util';
+import {
+  formatDateAbidjan,
+  formatXof,
+} from '../common/export/export-format.util';
 import {
   MailService,
+  PriceChangeDirection,
   SprintNotificationChange,
 } from '../common/mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -41,6 +45,7 @@ export interface SprintNotificationRecipientResult {
 export interface SprintNotificationSummary {
   kind:
     | 'SCHEDULE_OR_LOCATION_UPDATED'
+    | 'PRICE_UPDATED'
     | 'POSTPONED_OR_SUSPENDED'
     | 'SESSION_REACTIVATED'
     | 'SELECTION_SELECTED'
@@ -336,17 +341,25 @@ export class SprintsService {
       data: buildSprintUpdateData(data, startAt, endAt),
     });
 
-    const changes = this.detectScheduleOrLocationChanges(sprint, updated);
+    const scheduleChanges = this.detectScheduleOrLocationChanges(sprint, updated);
+    const { changes: priceChanges, direction: priceDirection } =
+      this.detectPriceChanges(sprint, updated);
+    const changes = [...scheduleChanges, ...priceChanges];
     if (
       data.notifyParticipants !== false &&
       sprint.status === 'ACTIVE' &&
       changes.length > 0
     ) {
+      const kind =
+        priceChanges.length > 0
+          ? 'PRICE_UPDATED'
+          : 'SCHEDULE_OR_LOCATION_UPDATED';
       const notification = await this.notifyPaidEnrollments({
         sprintId: id,
         sprintName: updated.name,
-        kind: 'SCHEDULE_OR_LOCATION_UPDATED',
+        kind,
         changes,
+        priceDirection: priceChanges.length > 0 ? priceDirection : undefined,
         note: data.notificationNote,
         startAt: updated.startAt,
         endAt: updated.endAt,
@@ -725,14 +738,60 @@ export class SprintsService {
     return changes;
   }
 
+  private detectPriceChanges(
+    before: { priceXof: number; duoPriceXof?: number | null },
+    after: { priceXof: number; duoPriceXof?: number | null },
+  ): { changes: SprintNotificationChange[]; direction: PriceChangeDirection } {
+    const changes: SprintNotificationChange[] = [];
+    let hasIncrease = false;
+    let hasDecrease = false;
+
+    if (before.priceXof !== after.priceXof) {
+      if (after.priceXof > before.priceXof) hasIncrease = true;
+      else hasDecrease = true;
+      changes.push({
+        label: 'Tarif Solo',
+        oldValue: formatXof(before.priceXof),
+        newValue: formatXof(after.priceXof),
+      });
+    }
+
+    const oldDuo = before.duoPriceXof ?? null;
+    const newDuo = after.duoPriceXof ?? null;
+    if (oldDuo !== newDuo) {
+      if (oldDuo !== null && newDuo !== null) {
+        if (newDuo > oldDuo) hasIncrease = true;
+        else hasDecrease = true;
+      }
+      changes.push({
+        label: 'Tarif Duo (2 places)',
+        oldValue: oldDuo !== null ? formatXof(oldDuo) : 'Non proposé',
+        newValue: newDuo !== null ? formatXof(newDuo) : 'Désactivé',
+      });
+    }
+
+    const direction: PriceChangeDirection =
+      hasIncrease && hasDecrease
+        ? 'mixed'
+        : hasIncrease
+          ? 'increase'
+          : hasDecrease
+            ? 'decrease'
+            : 'mixed';
+
+    return { changes, direction };
+  }
+
   private async notifyPaidEnrollments(params: {
     sprintId: number;
     sprintName: string;
     kind:
       | 'SCHEDULE_OR_LOCATION_UPDATED'
+      | 'PRICE_UPDATED'
       | 'POSTPONED_OR_SUSPENDED'
       | 'SESSION_REACTIVATED';
     changes?: SprintNotificationChange[];
+    priceDirection?: PriceChangeDirection;
     newStatus?: 'DRAFT' | 'INACTIVE';
     note?: string;
     startAt?: Date;
@@ -745,6 +804,7 @@ export class SprintsService {
       sprintName: params.sprintName,
       kind: params.kind,
       changes: params.changes,
+      priceDirection: params.priceDirection,
       newStatus: params.newStatus,
       note: params.note,
       startAt: params.startAt,
@@ -774,6 +834,7 @@ export class SprintsService {
         sprintName: params.sprintName,
         kind: params.kind,
         changes: params.changes,
+        priceDirection: params.priceDirection,
         newStatus: params.newStatus,
         note: params.note,
         startAtIso: params.startAt?.toISOString(),
@@ -826,6 +887,7 @@ export class SprintsService {
                 sprintName: params.sprintName,
                 kind: params.kind,
                 changes: params.changes,
+                priceDirection: params.priceDirection,
                 newStatus: params.newStatus,
                 note: params.note,
                 startAt: params.startAt,

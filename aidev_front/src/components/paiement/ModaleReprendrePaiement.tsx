@@ -75,11 +75,11 @@ export function ModaleReprendrePaiement({ children }: { children: ReactNode }) {
           className="fixed inset-0 z-50 flex items-center justify-center bg-bg/80 p-4 backdrop-blur-sm"
         >
           <div
-            className="w-full max-w-[36rem]
-                       max-h-[min(90svh,50rem)] overflow-y-auto
+            className="flex w-full max-w-[38rem] flex-col
+                       max-h-[min(90svh,52rem)] overflow-hidden
                        rounded-card border border-fg/15 bg-bg text-fg shadow-2xl"
           >
-            <div className="p-[clamp(1.25rem,4vw,2.25rem)]">
+            <div className="shrink-0 border-b border-fg/10 px-[clamp(1.25rem,4vw,2.25rem)] py-[clamp(1rem,3vw,1.5rem)]">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="font-mono text-small text-[#6BA3FF]">
@@ -90,7 +90,7 @@ export function ModaleReprendrePaiement({ children }: { children: ReactNode }) {
                   </p>
                   <h2
                     id="titre-reprendre-paiement"
-                    className="mt-2 text-h3 font-bold leading-tight tracking-tight"
+                    className="mt-1.5 text-h3 font-bold leading-tight tracking-tight"
                   >
                     Finalise ton inscription.
                   </h2>
@@ -117,10 +117,10 @@ export function ModaleReprendrePaiement({ children }: { children: ReactNode }) {
                   </svg>
                 </button>
               </div>
+            </div>
 
-              <div className="mt-[clamp(1.25rem,3svh,2rem)]">
-                <ReprendrePaiement onFermer={fermer} />
-              </div>
+            <div className="flex-1 overflow-y-auto px-[clamp(1.25rem,4vw,2.25rem)] py-[clamp(1.25rem,3svh,1.75rem)]">
+              <ReprendrePaiement onFermer={fermer} />
             </div>
           </div>
         </div>

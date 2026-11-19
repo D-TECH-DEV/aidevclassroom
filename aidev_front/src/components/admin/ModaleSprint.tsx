@@ -174,7 +174,7 @@ export function ModaleSprint({
       onClick={(e) => {
         if (e.target === dialogRef.current && !enCours) onFermer();
       }}
-      className="m-auto w-[min(95vw,46rem)] rounded-card border border-fg/20
+      className="m-auto w-[min(95vw,50rem)] overflow-hidden rounded-card border border-fg/20
                  bg-surface p-0 text-fg backdrop:bg-bg/80 backdrop:backdrop-blur-sm"
     >
       <div className="flex max-h-[88svh] flex-col">
@@ -200,7 +200,15 @@ export function ModaleSprint({
 
         <BarreEtapesModale etape={etape} allerVersEtape={allerVersEtape} />
 
-        <form action={agir} className="flex flex-1 flex-col overflow-hidden">
+        <form
+          action={agir}
+          onSubmit={(e) => {
+            if (etape < 3) {
+              e.preventDefault();
+            }
+          }}
+          className="flex flex-1 flex-col overflow-hidden"
+        >
           {edition && sprint ? <input type="hidden" name="id" value={sprint.id} /> : null}
           {!edition && lancer ? <input type="hidden" name="lancer" value="oui" /> : null}
           {champsCaches.map(([k, v]) => (
@@ -271,6 +279,7 @@ export function ModaleSprint({
             <div className="flex items-center gap-3">
               {etape < 3 ? (
                 <button
+                  key="bouton-suivant"
                   type="button"
                   onClick={() => {
                     if (etape === 1 && check1()) setEtape(2);
@@ -283,6 +292,7 @@ export function ModaleSprint({
                 </button>
               ) : (
                 <button
+                  key="bouton-soumettre"
                   type="submit" disabled={enCours}
                   className="inline-flex items-center gap-1.5 rounded-field bg-accent px-5 py-2 font-bold text-small text-bg transition-opacity hover:opacity-90 disabled:opacity-50"
                 >

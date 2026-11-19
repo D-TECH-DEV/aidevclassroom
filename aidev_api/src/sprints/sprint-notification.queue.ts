@@ -11,6 +11,7 @@ import { Job, Queue, Worker } from 'bullmq';
 import Redis from 'ioredis';
 import {
   MailService,
+  PriceChangeDirection,
   SprintNotificationChange,
 } from '../common/mail/mail.service';
 import { RedisService } from '../common/redis/redis.service';
@@ -22,9 +23,11 @@ export interface CampaignJobPayload {
   sprintName: string;
   kind:
     | 'SCHEDULE_OR_LOCATION_UPDATED'
+    | 'PRICE_UPDATED'
     | 'POSTPONED_OR_SUSPENDED'
     | 'SESSION_REACTIVATED';
   changes?: SprintNotificationChange[];
+  priceDirection?: PriceChangeDirection;
   newStatus?: 'DRAFT' | 'INACTIVE';
   note?: string;
   startAtIso?: string;
@@ -226,6 +229,7 @@ export class SprintNotificationQueueService
         sprintName: payload.sprintName,
         kind: payload.kind,
         changes: payload.changes,
+        priceDirection: payload.priceDirection,
         newStatus: payload.newStatus,
         note: payload.note,
         startAtIso: payload.startAtIso,
@@ -251,6 +255,7 @@ export class SprintNotificationQueueService
       sprintName: campaign.sprintName,
       kind: campaign.kind,
       changes: campaign.changes,
+      priceDirection: campaign.priceDirection,
       newStatus: campaign.newStatus,
       note: campaign.note,
       startAt: campaign.startAtIso ? new Date(campaign.startAtIso) : undefined,
