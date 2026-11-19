@@ -1,14 +1,22 @@
 import type { MetadataRoute } from "next";
 
+import { recupereSiteUrl } from "@/lib/seo";
+
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = (
-    process.env.NEXT_PUBLIC_SITE_URL ?? "https://ai-devclassroom.com"
-  ).replace(/\/$/, "");
+  const baseUrl = recupereSiteUrl();
+  const maintenant = new Date();
   return [
     {
       url: `${baseUrl}/`,
-      changeFrequency: "weekly",
+      lastModified: maintenant,
+      changeFrequency: "daily",
       priority: 1,
+    },
+    {
+      url: `${baseUrl}/llms.txt`,
+      lastModified: maintenant,
+      changeFrequency: "weekly",
+      priority: 0.6,
     },
   ];
 }

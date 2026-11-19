@@ -2,12 +2,15 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
+  Optional,
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { EnrollmentStatus, Prisma } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { hashTrackingToken } from '../common/guards/tracking-token.guard';
+import { MailService } from '../common/mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { normalizeStudentInput } from '../students/students.service';
 import { remainingAmountXof, totalPaidXof } from '../payments/balance.util';
@@ -32,7 +35,12 @@ export const ENROLLMENT_TRANSITIONS: Record<
 
 @Injectable()
 export class EnrollmentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(EnrollmentsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly mail?: MailService,
+  ) {}
 
   async create(
     sprintId: number,
@@ -281,7 +289,7 @@ export class EnrollmentsService {
   async changeStatus(id: number, status: EnrollmentStatus) {
     const e = await this.prisma.enrollment.findUnique({
       where: { id },
-      include: { payments: true },
+      include: { payments: true, student: true, sprint: true },
     });
     if (!e) {
       throw new NotFoundException({
@@ -306,13 +314,35 @@ export class EnrollmentsService {
       }
     }
     if (status === 'CANCELLED') {
-      return this.prisma.$transaction(async (tx) => {
+      const dejaAnnule = e.status === 'CANCELLED';
+      const cancelled = await this.prisma.$transaction(async (tx) => {
         await tx.payment.updateMany({
           where: { enrollmentId: id, status: 'PENDING' },
           data: { status: 'ABANDONED' },
         });
         return tx.enrollment.update({ where: { id }, data: { status } });
       });
+
+      if (!dejaAnnule && this.mail && e.student?.email) {
+        const paidXof = totalPaidXof(e.payments);
+        const studentName =
+          `${e.student.firstName} ${e.student.lastName}`.trim() || 'Participant';
+        try {
+          await this.mail.sendEnrollmentCancelledEmail({
+            to: e.student.email,
+            studentName,
+            sprintName: e.sprint?.name ?? 'AIDevClassroom',
+            enrollmentId: e.id,
+            paidXof,
+            totalAmountXof: e.totalAmountXof,
+          });
+        } catch (err) {
+          this.logger.warn(
+            `Echec envoi e-mail annulation dossier #${e.id} : ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }
+      return cancelled;
     }
     return this.prisma.enrollment.update({ where: { id }, data: { status } });
   }

@@ -147,6 +147,7 @@ export type NouveauSprint = {
 export type NotificationSprintResult = {
   kind:
     | "SCHEDULE_OR_LOCATION_UPDATED"
+    | "PRICE_UPDATED"
     | "POSTPONED_OR_SUSPENDED"
     | "SESSION_REACTIVATED"
     | "SELECTION_SELECTED"

@@ -19,7 +19,9 @@ export class DashboardService {
       recentEnrollments,
       recentPayments,
     ] = await Promise.all([
-      this.prisma.student.count(),
+      this.prisma.student.count({
+        where: { enrollments: { some: { status: { not: 'CANCELLED' } } } },
+      }),
       this.prisma.sprint.count({ where: { status: 'ACTIVE' } }),
       this.prisma.enrollment.count({ where: { status: { not: 'CANCELLED' } } }),
       this.prisma.$queryRaw<{ outstanding: bigint | number | string }[]>`
@@ -39,14 +41,21 @@ export class DashboardService {
       this.prisma.payment.aggregate({
         _sum: { amountXof: true },
         _count: true,
-        where: { status: 'SUCCESS' },
+        where: {
+          status: 'SUCCESS',
+          enrollment: { status: { not: 'CANCELLED' } },
+        },
       }),
       this.prisma.payment.aggregate({
         _sum: { amountXof: true },
         _count: true,
-        where: { status: 'PENDING' },
+        where: {
+          status: 'PENDING',
+          enrollment: { status: { not: 'CANCELLED' } },
+        },
       }),
       this.prisma.enrollment.findMany({
+        where: { status: { not: 'CANCELLED' } },
         orderBy: { createdAt: 'desc' },
         take: 10,
         include: {
@@ -58,6 +67,7 @@ export class DashboardService {
         },
       }),
       this.prisma.payment.findMany({
+        where: { enrollment: { status: { not: 'CANCELLED' } } },
         orderBy: { createdAt: 'desc' },
         take: 10,
         include: {
@@ -135,6 +145,7 @@ export class DashboardService {
 
     const where = {
       status: 'SUCCESS' as const,
+      enrollment: { status: { not: 'CANCELLED' as const } },
       ...(validFrom || validTo
         ? {
             paidAt: {
@@ -145,10 +156,10 @@ export class DashboardService {
         : {}),
     };
     const fromClause = validFrom
-      ? Prisma.sql`AND "paid_at" >= ${validFrom}`
+      ? Prisma.sql`AND p."paid_at" >= ${validFrom}`
       : Prisma.empty;
     const toClause = validTo
-      ? Prisma.sql`AND "paid_at" <= ${validTo}`
+      ? Prisma.sql`AND p."paid_at" <= ${validTo}`
       : Prisma.empty;
 
     const [agg, byDay] = await Promise.all([
@@ -158,12 +169,14 @@ export class DashboardService {
         where,
       }),
       this.prisma.$queryRaw<{ day: string; total: number; count: number }[]>`
-        SELECT TO_CHAR(DATE("paid_at"), 'YYYY-MM-DD') AS day, SUM("amount_xof")::int AS total, COUNT(*)::int AS count
-        FROM "payments"
-        WHERE "status" = 'SUCCESS'
+        SELECT TO_CHAR(DATE(p."paid_at"), 'YYYY-MM-DD') AS day, SUM(p."amount_xof")::int AS total, COUNT(*)::int AS count
+        FROM "payments" p
+        INNER JOIN "enrollments" e ON e."id" = p."enrollment_id"
+        WHERE p."status" = 'SUCCESS'
+          AND e."status" <> 'CANCELLED'
           ${fromClause}
           ${toClause}
-        GROUP BY DATE("paid_at")
+        GROUP BY DATE(p."paid_at")
         ORDER BY day DESC
         LIMIT 30
       `.catch(() => [] as { day: string; total: number; count: number }[]),

@@ -227,4 +227,133 @@ describe('SprintsService (CRUD + regles)', () => {
       city: null,
     });
   });
+
+  it('notifie les inscrits avec garantie tarifaire lors dune augmentation de prix sur sprint actif', async () => {
+    const prisma = {
+      sprint: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 1,
+          name: 'Sprint #1',
+          status: 'ACTIVE',
+          priceXof: 50000,
+          minimumPaymentXof: 5000,
+          duoPriceXof: 80000,
+          duoMinimumPaymentXof: 10000,
+          startAt: new Date(dto.startAt),
+          endAt: new Date(dto.endAt),
+          city: 'Yamoussoukro',
+          location: 'Mairie',
+        }),
+        update: jest.fn().mockResolvedValue({
+          id: 1,
+          name: 'Sprint #1',
+          status: 'ACTIVE',
+          priceXof: 65000,
+          minimumPaymentXof: 5000,
+          duoPriceXof: 80000,
+          duoMinimumPaymentXof: 10000,
+          startAt: new Date(dto.startAt),
+          endAt: new Date(dto.endAt),
+          city: 'Yamoussoukro',
+          location: 'Mairie',
+        }),
+      },
+      enrollment: {
+        findMany: jest.fn().mockResolvedValue([
+          { student: { firstName: 'Awa', lastName: 'Kone', email: 'awa@test.ci' } },
+        ]),
+      },
+      sprintNotification: {
+        create: jest.fn().mockResolvedValue({ id: 10 }),
+      },
+    };
+    const mail = {
+      buildSprintNotificationEmailContent: jest.fn().mockReturnValue({
+        subject: 'Information tarifaire',
+        html: '<p>ok</p>',
+      }),
+      sendSprintNotificationEmail: jest.fn().mockResolvedValue(true),
+    };
+    const svc = new SprintsService(prisma as never, mail as never);
+    const res = (await svc.update(1, { priceXof: 65000 })) as {
+      notification?: { kind: string; sentCount: number };
+    };
+    expect(res.notification).toMatchObject({
+      kind: 'PRICE_UPDATED',
+      sentCount: 1,
+    });
+    expect(mail.sendSprintNotificationEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'PRICE_UPDATED',
+        priceDirection: 'increase',
+        changes: [
+          expect.objectContaining({
+            label: 'Tarif Solo',
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('notifie avec tact lors dune reduction de prix sur sprint actif', async () => {
+    const prisma = {
+      sprint: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 1,
+          name: 'Sprint #1',
+          status: 'ACTIVE',
+          priceXof: 50000,
+          minimumPaymentXof: 5000,
+          duoPriceXof: 80000,
+          duoMinimumPaymentXof: 10000,
+          startAt: new Date(dto.startAt),
+          endAt: new Date(dto.endAt),
+          city: 'Yamoussoukro',
+          location: 'Mairie',
+        }),
+        update: jest.fn().mockResolvedValue({
+          id: 1,
+          name: 'Sprint #1',
+          status: 'ACTIVE',
+          priceXof: 35000,
+          minimumPaymentXof: 5000,
+          duoPriceXof: 80000,
+          duoMinimumPaymentXof: 10000,
+          startAt: new Date(dto.startAt),
+          endAt: new Date(dto.endAt),
+          city: 'Yamoussoukro',
+          location: 'Mairie',
+        }),
+      },
+      enrollment: {
+        findMany: jest.fn().mockResolvedValue([
+          { student: { firstName: 'Koffi', lastName: 'Yao', email: 'koffi@test.ci' } },
+        ]),
+      },
+      sprintNotification: {
+        create: jest.fn().mockResolvedValue({ id: 11 }),
+      },
+    };
+    const mail = {
+      buildSprintNotificationEmailContent: jest.fn().mockReturnValue({
+        subject: 'Ajustement tarifaire',
+        html: '<p>ok</p>',
+      }),
+      sendSprintNotificationEmail: jest.fn().mockResolvedValue(true),
+    };
+    const svc = new SprintsService(prisma as never, mail as never);
+    const res = (await svc.update(1, { priceXof: 35000 })) as {
+      notification?: { kind: string; sentCount: number };
+    };
+    expect(res.notification).toMatchObject({
+      kind: 'PRICE_UPDATED',
+      sentCount: 1,
+    });
+    expect(mail.sendSprintNotificationEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'PRICE_UPDATED',
+        priceDirection: 'decrease',
+      }),
+    );
+  });
 });
