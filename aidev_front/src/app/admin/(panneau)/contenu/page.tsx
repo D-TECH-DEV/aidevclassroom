@@ -35,7 +35,7 @@ async function ContenuCharge() {
     const donnees = await contenuSite();
     return <FormulaireContenu initial={donnees} />;
   } catch (cause) {
-    if (sessionPerdue(cause)) redirect("/admin/connexion");
+    if (sessionPerdue(cause)) redirect("/admin/connexion?expiree=1");
     return (
       <div className="flex flex-col gap-6">
         <EnTetePage

@@ -15,12 +15,21 @@ export async function POST(requete: NextRequest) {
   }
 
   const formData = await requete.formData();
-  const res = await fetch(`${BASE_API}/admin/site-content/trainer-photo`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-    body: formData,
-    cache: "no-store",
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_API}/admin/site-content/trainer-photo`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+      cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch {
+    return NextResponse.json(
+      { message: "L'API est injoignable." },
+      { status: 502 },
+    );
+  }
 
   const brut = (await res.json().catch(() => ({}))) as Record<
     string,

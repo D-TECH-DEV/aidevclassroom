@@ -31,6 +31,21 @@ const COOKIE = "aidevsprint_admin";
 export default function proxy(requete: NextRequest) {
   const connecte = Boolean(requete.cookies.get(COOKIE)?.value);
   const surLaConnexion = requete.nextUrl.pathname === "/admin/connexion";
+  const expiree = requete.nextUrl.searchParams.get("expiree") === "1";
+
+  if (surLaConnexion && expiree) {
+    const reponse = NextResponse.next();
+    if (connecte) {
+      reponse.cookies.set(COOKIE, "", {
+        path: "/admin",
+        maxAge: 0,
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+      });
+    }
+    return reponse;
+  }
 
   if (!connecte && !surLaConnexion) {
     return NextResponse.redirect(new URL("/admin/connexion", requete.url));

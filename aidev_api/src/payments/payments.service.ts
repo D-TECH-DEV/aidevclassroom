@@ -5,13 +5,19 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
   ServiceUnavailableException,
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Payment, PaymentStatus, Prisma } from '@prisma/client';
 import { randomBytes } from 'crypto';
+import { MailService } from '../common/mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  ReceiptPdfService,
+  buildLogicalPaymentReference,
+} from './receipt-pdf.service';
 import {
   AMOUNT_ERROR_MESSAGES,
   remainingAmountXof,
@@ -33,6 +39,7 @@ export interface InitializeOptions {
   provider?: string;
   phone?: string;
   partialTermsAccepted?: boolean;
+  callbackUrl?: string;
 }
 
 function newReference(): string {
@@ -101,6 +108,8 @@ export class PaymentsService {
     private readonly prisma: PrismaService,
     private readonly paystack: PaystackService,
     private readonly config: ConfigService,
+    @Optional() private readonly mail?: MailService,
+    @Optional() private readonly receiptPdf?: ReceiptPdfService,
   ) {}
 
   private balanceOf(
@@ -253,6 +262,12 @@ export class PaymentsService {
         const reverified = await this.reverifyChargeBeforeRecharge(reusable);
         if (reverified) return reverified;
       }
+    } else {
+      await this.releaseStaleCheckoutPendings(
+        enrollmentId,
+        enrollment.totalAmountXof,
+        amountXof,
+      );
     }
 
     // Montant 100 % serveur : la reservation PENDING (SELECT ... FOR UPDATE)
@@ -276,6 +291,7 @@ export class PaymentsService {
       payment,
       enrollment.student.email,
       currency,
+      opts?.callbackUrl,
     );
   }
 
@@ -284,6 +300,83 @@ export class PaymentsService {
    * reference unique (P2002), une nouvelle reference est tiree (borne a
    * MAX_REFERENCE_ATTEMPTS essais) au lieu d'echouer en 409 immediat.
    */
+  async cancelPending(reference: string) {
+    const payment = await this.prisma.payment.findUnique({
+      where: { reference },
+    });
+    if (!payment || payment.status !== 'PENDING') {
+      return { status: payment?.status ?? 'ABANDONED' };
+    }
+    try {
+      const data = await this.paystack.verifyTransaction(reference);
+      if (data?.status?.toLowerCase() === 'success') {
+        return this.verify(reference);
+      }
+    } catch {
+      // Paystack injoignable ou transaction inexistante : on libere la reservation locale.
+    }
+    const updated = await this.prisma.payment.update({
+      where: { id: payment.id },
+      data: { status: 'ABANDONED' },
+    });
+    return { status: updated.status, reference: updated.reference };
+  }
+
+  private async releaseStaleCheckoutPendings(
+    enrollmentId: number,
+    totalAmountXof: number,
+    requestedAmountXof: number,
+  ): Promise<void> {
+    const fresh = await this.prisma.payment.findMany({
+      where: { enrollmentId },
+      select: {
+        id: true,
+        reference: true,
+        status: true,
+        amountXof: true,
+        authorizationUrl: true,
+        createdAt: true,
+      },
+    });
+    const cutoff = pendingReserveCutoff(pendingReserveMinutes(this.config));
+    const success = fresh
+      .filter((p) => p.status === 'SUCCESS')
+      .reduce((s, p) => s + p.amountXof, 0);
+    const activePendings = fresh.filter(
+      (p) => p.status === 'PENDING' && p.createdAt >= cutoff,
+    );
+    const reserved = activePendings.reduce((s, p) => s + p.amountXof, 0);
+    if (requestedAmountXof <= totalAmountXof - success - reserved) {
+      return;
+    }
+
+    for (const p of activePendings) {
+      if (!p.authorizationUrl) continue;
+      try {
+        const data = await this.paystack.verifyTransaction(p.reference);
+        if (!data) continue;
+        if (data.status?.toLowerCase() === 'success') {
+          await this.verify(p.reference);
+        } else {
+          await this.prisma.payment.update({
+            where: { id: p.id },
+            data: { status: 'ABANDONED' },
+          });
+        }
+      } catch (e) {
+        if (
+          e instanceof Error &&
+          e.message.startsWith('PAYSTACK_VERIFY_FAILED:')
+        ) {
+          await this.prisma.payment.update({
+            where: { id: p.id },
+            data: { status: 'ABANDONED' },
+          });
+        }
+      }
+    }
+  }
+
   private async createPendingWithRetry(
     enrollmentId: number,
     totalAmountXof: number,
@@ -351,6 +444,7 @@ export class PaymentsService {
     payment: Payment,
     email: string,
     currency: string,
+    callbackUrl?: string,
   ) {
     const reference = payment.reference;
     try {
@@ -358,7 +452,7 @@ export class PaymentsService {
         email,
         reference,
         currency,
-        callbackUrl: this.paystack.callbackUrl,
+        callbackUrl: callbackUrl ?? this.paystack.callbackUrl,
         providerAmount: toProviderAmount(payment.amountXof, currency),
       });
       const updated = await this.prisma.payment.update({
@@ -622,7 +716,111 @@ export class PaymentsService {
       }
       return done;
     });
+    if (updated.status === 'SUCCESS') {
+      void this.sendReceiptIfNeeded(updated.id, false);
+    }
     return this.withBalance(updated);
+  }
+
+  private async buildReceiptPayload(reference: string) {
+    const payment = await this.prisma.payment.findUnique({
+      where: { reference },
+      include: {
+        enrollment: {
+          include: {
+            student: true,
+            sprint: { select: { name: true } },
+            payments: { select: { status: true, amountXof: true } },
+          },
+        },
+      },
+    });
+    if (!payment || payment.status !== 'SUCCESS') {
+      throw new NotFoundException({
+        code: 'PAYMENT_RECEIPT_UNAVAILABLE',
+        message: 'Recu disponible uniquement pour un paiement reussi.',
+      });
+    }
+    const e = payment.enrollment;
+    const paid = totalPaidXof(e.payments);
+    const remaining = remainingAmountXof(e.totalAmountXof, e.payments);
+    const studentName = `${e.student.firstName} ${e.student.lastName}`.trim();
+    const channel = this.extractPaymentChannel(payment.providerResponse);
+    return {
+      payment,
+      data: {
+        paymentId: payment.id,
+        enrollmentId: e.id,
+        reference: payment.reference,
+        channel,
+        paidAt: payment.paidAt ?? payment.updatedAt,
+        studentName,
+        studentEmail: e.student.email,
+        studentPhone: e.student.phone,
+        sprintName: e.sprint.name,
+        plan: e.plan,
+        amountXof: payment.amountXof,
+        totalPaidXof: paid,
+        totalAmountXof: e.totalAmountXof,
+        remainingAmountXof: remaining,
+      },
+    };
+  }
+
+  async generateReceiptPdf(reference: string): Promise<Buffer> {
+    if (!this.receiptPdf) {
+      throw new ServiceUnavailableException('Service PDF indisponible.');
+    }
+    const { data } = await this.buildReceiptPayload(reference);
+    return this.receiptPdf.generateReceiptPdf(data);
+  }
+
+  async sendReceiptByEmail(
+    reference: string,
+  ): Promise<{ sent: boolean; email: string }> {
+    const { payment, data } = await this.buildReceiptPayload(reference);
+    if (!this.mail || !this.receiptPdf) {
+      return { sent: false, email: data.studentEmail };
+    }
+    const pdfBuffer = await this.receiptPdf.generateReceiptPdf(data);
+    const sent = await this.mail.sendPaymentReceiptEmail({
+      to: data.studentEmail,
+      studentName: data.studentName,
+      sprintName: data.sprintName,
+      plan: data.plan,
+      paymentId: data.paymentId,
+      reference: data.reference,
+      channel: data.channel,
+      amountXof: data.amountXof,
+      totalPaidXof: data.totalPaidXof,
+      totalAmountXof: data.totalAmountXof,
+      remainingAmountXof: data.remainingAmountXof,
+      paidAt: data.paidAt,
+      pdfBuffer,
+    });
+    if (sent && !payment.receiptSentAt) {
+      await this.prisma.payment.update({
+        where: { id: payment.id },
+        data: { receiptSentAt: new Date() },
+      });
+    }
+    return { sent, email: data.studentEmail };
+  }
+
+  private async sendReceiptIfNeeded(paymentId: number, force: boolean) {
+    if (!this.mail || !this.receiptPdf) return;
+    try {
+      const payment = await this.prisma.payment.findUnique({
+        where: { id: paymentId },
+        select: { reference: true, receiptSentAt: true },
+      });
+      if (!payment || (!force && payment.receiptSentAt)) return;
+      await this.sendReceiptByEmail(payment.reference);
+    } catch (e) {
+      this.logger.warn(
+        `Erreur envoi automatique recu #${paymentId}: ${(e as Error).message}`,
+      );
+    }
   }
 
   /**
@@ -782,6 +980,15 @@ export class PaymentsService {
     return { expired: res.count };
   }
 
+  private extractPaymentChannel(providerResponse: unknown): string | null {
+    const pr = providerResponse as {
+      channel?: unknown;
+      data?: { channel?: unknown };
+    } | null;
+    const channelRaw = pr?.channel ?? pr?.data?.channel;
+    return typeof channelRaw === 'string' ? channelRaw : null;
+  }
+
   private async withBalance(payment: Payment) {
     const siblings = await this.prisma.payment.findMany({
       where: { enrollmentId: payment.enrollmentId },
@@ -789,15 +996,27 @@ export class PaymentsService {
     });
     const enrollment = await this.prisma.enrollment.findUnique({
       where: { id: payment.enrollmentId },
-      select: { totalAmountXof: true },
+      select: {
+        totalAmountXof: true,
+        sprint: { select: { name: true } },
+      },
+    });
+    const paid = totalPaidXof(siblings);
+    const remaining = remainingAmountXof(
+      enrollment?.totalAmountXof ?? payment.amountXof,
+      siblings,
+    );
+    const logicalReference = buildLogicalPaymentReference({
+      paymentId: payment.id,
+      sprintName: enrollment?.sprint?.name ?? 'Formation',
+      remainingAmountXof: remaining,
+      channel: this.extractPaymentChannel(payment.providerResponse),
     });
     return {
       ...payment,
-      totalPaidXof: totalPaidXof(siblings),
-      remainingAmountXof: remainingAmountXof(
-        enrollment?.totalAmountXof ?? payment.amountXof,
-        siblings,
-      ),
+      totalPaidXof: paid,
+      remainingAmountXof: remaining,
+      logicalReference,
     };
   }
 
@@ -848,7 +1067,7 @@ export class PaymentsService {
 
   async listAdmin(
     page = 1,
-    limit = 20,
+    limit = 50,
     filters: {
       enrollmentId?: number;
       sprintId?: number;
@@ -858,18 +1077,35 @@ export class PaymentsService {
   ) {
     const take = Math.min(Math.max(limit, 1), 100);
     const skip = (Math.max(page, 1) - 1) * take;
+    const refTokens = (filters.reference ?? '')
+      .trim()
+      .split(/\s+/)
+      .filter((t) => t.length > 0);
     const where: Prisma.PaymentWhereInput = {
       ...(filters.enrollmentId ? { enrollmentId: filters.enrollmentId } : {}),
       ...(filters.sprintId
         ? { enrollment: { sprintId: filters.sprintId } }
         : {}),
       ...(filters.status ? { status: filters.status } : {}),
-      ...(filters.reference
+      ...(refTokens.length > 0
         ? {
-            OR: [
-              { reference: { contains: filters.reference } },
-              { providerReference: { contains: filters.reference } },
-            ],
+            AND: refTokens.map((token) => ({
+              OR: [
+                { reference: { contains: token, mode: 'insensitive' } },
+                { providerReference: { contains: token, mode: 'insensitive' } },
+                {
+                  enrollment: {
+                    student: {
+                      OR: [
+                        { firstName: { contains: token, mode: 'insensitive' } },
+                        { lastName: { contains: token, mode: 'insensitive' } },
+                        { email: { contains: token, mode: 'insensitive' } },
+                      ],
+                    },
+                  },
+                },
+              ],
+            })),
           }
         : {}),
     };
@@ -908,18 +1144,35 @@ export class PaymentsService {
       reference?: string;
     } = {},
   ) {
+    const refTokens = (filters.reference ?? '')
+      .trim()
+      .split(/\s+/)
+      .filter((t) => t.length > 0);
     const where: Prisma.PaymentWhereInput = {
       ...(filters.enrollmentId ? { enrollmentId: filters.enrollmentId } : {}),
       ...(filters.sprintId
         ? { enrollment: { sprintId: filters.sprintId } }
         : {}),
       ...(filters.status ? { status: filters.status } : {}),
-      ...(filters.reference
+      ...(refTokens.length > 0
         ? {
-            OR: [
-              { reference: { contains: filters.reference } },
-              { providerReference: { contains: filters.reference } },
-            ],
+            AND: refTokens.map((token) => ({
+              OR: [
+                { reference: { contains: token, mode: 'insensitive' } },
+                { providerReference: { contains: token, mode: 'insensitive' } },
+                {
+                  enrollment: {
+                    student: {
+                      OR: [
+                        { firstName: { contains: token, mode: 'insensitive' } },
+                        { lastName: { contains: token, mode: 'insensitive' } },
+                        { email: { contains: token, mode: 'insensitive' } },
+                      ],
+                    },
+                  },
+                },
+              ],
+            })),
           }
         : {}),
     };

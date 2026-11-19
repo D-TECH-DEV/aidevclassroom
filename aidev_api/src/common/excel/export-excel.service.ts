@@ -5,6 +5,7 @@ import {
   formatDateAbidjan,
   mapEnrollmentRow,
   mapPaymentRow,
+  sanitizeSpreadsheetCell,
   statusColorsArgb,
   type EnrollmentExportRow,
   type PaymentExportRow,
@@ -151,7 +152,9 @@ export class ExportExcelService {
     titleCell.font = { name: 'Calibri', size: 12, bold: true, color: { argb: EXPORT_COLORS.white } };
 
     const metaCell = sheet.getRow(3).getCell(1);
-    metaCell.value = `Exporté le ${formatDateAbidjan(new Date())} · ${filterSummary}`;
+    metaCell.value = sanitizeSpreadsheetCell(
+      `Exporté le ${formatDateAbidjan(new Date())} · ${filterSummary}`,
+    );
     metaCell.font = { name: 'Calibri', size: 10, color: { argb: EXPORT_COLORS.muted } };
   }
 
@@ -216,7 +219,11 @@ export class ExportExcelService {
       columns.forEach((col, cIdx) => {
         const cell = row.getCell(cIdx + 1);
         const val = rowObj[col.key];
-        cell.value = val as ExcelJS.CellValue;
+        cell.value = (
+          typeof val === 'string' && col.key !== statusKey
+            ? sanitizeSpreadsheetCell(val)
+            : val
+        ) as ExcelJS.CellValue;
         cell.alignment = { vertical: 'middle', horizontal: col.align ?? 'left' };
         if (col.numFmt && (val instanceof Date || typeof val === 'number')) {
           cell.numFmt = col.numFmt;

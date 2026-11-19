@@ -18,6 +18,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import {
   ChangeSprintStatusDto,
   CreateSprintDto,
+  NotifySelectionDto,
   UpdateSprintDto,
 } from './dto/sprint.dto';
 import { SprintsService } from './sprints.service';
@@ -31,7 +32,7 @@ export class SprintsController {
   listPublic(@Query('page') page?: string, @Query('limit') limit?: string) {
     return this.sprints.listPublic(
       page ? parseInt(page, 10) : 1,
-      limit ? parseInt(limit, 10) : 20,
+      limit ? parseInt(limit, 10) : 50,
     );
   }
 
@@ -46,7 +47,7 @@ export class SprintsController {
   ) {
     return this.sprints.listAll(
       page ? parseInt(page, 10) : 1,
-      limit ? parseInt(limit, 10) : 20,
+      limit ? parseInt(limit, 10) : 50,
       status,
     );
   }
@@ -59,6 +60,55 @@ export class SprintsController {
   @Get('sprints/:id')
   detailPublic(@Param('id', ParseIntPipe) id: number) {
     return this.sprints.detailPublic(id);
+  }
+
+  @Get('admin/sprints/notifications')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @ApiBearerAuth('jwt')
+  listNotifications(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.sprints.listNotifications(
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 50,
+    );
+  }
+
+  @Get('admin/sprints/:id/selection')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @ApiBearerAuth('jwt')
+  selection(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('group') group?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+  ) {
+    const safeGroup =
+      group === 'waitlist' || group === 'unpaid' ? group : 'selected';
+    return this.sprints.getSelection(id, {
+      group: safeGroup,
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 50,
+      search,
+    });
+  }
+
+  @Post('admin/sprints/:id/selection/notify')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @ApiBearerAuth('jwt')
+  notifySelection(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: NotifySelectionDto,
+  ) {
+    return this.sprints.notifySelection(id, {
+      notifyParticipants: dto.notifyParticipants,
+      note: dto.note,
+    });
   }
 
   @Get('admin/sprints/:id')
@@ -93,7 +143,10 @@ export class SprintsController {
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: ChangeSprintStatusDto,
   ) {
-    return this.sprints.changeStatus(id, dto.status);
+    return this.sprints.changeStatus(id, dto.status, {
+      notifyParticipants: dto.notifyParticipants,
+      notificationNote: dto.notificationNote,
+    });
   }
 
   @Delete('sprints/:id')

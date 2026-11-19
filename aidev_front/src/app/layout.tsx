@@ -18,6 +18,9 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_SITE_URL ?? "https://ai-devclassroom.com",
+  ),
   title: "AIDevClassroom #1 — Repars avec ton portfolio en ligne",
   description:
     "Formation d'une journée à Yamoussoukro : guider l'IA avec de vraies " +

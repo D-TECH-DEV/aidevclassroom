@@ -11,6 +11,7 @@ import {
 import { ChoixPaiementPartiel } from "@/components/inscription/ChoixPaiementPartiel";
 import { ParcoursPaiement } from "@/components/inscription/ParcoursPaiement";
 import {
+  abandonnePaiement,
   adressePaiementValide,
   dossiersLocaux,
   lancePaiement,
@@ -348,6 +349,7 @@ export function FormulaireInscription({
   const [indicatifTel, setIndicatifTel] = useState("+225");
   const [indicatifBinome, setIndicatifBinome] = useState("+225");
   const [erreurs, setErreurs] = useState<Erreurs>({});
+  const [etapeForm, setEtapeForm] = useState<1 | 2>(1);
   const [etat, setEtat] = useState<Etat>("repos");
   // Le forfait choisi : solo, ou duo quand le sprint le propose.
   const duoPropose = edition.prixDuoFCFA != null;
@@ -553,10 +555,11 @@ export function FormulaireInscription({
                 "Impossible de joindre le serveur. Vérifie ta connexion et réessaie.",
             },
       );
-      // Déjà inscrit avec cet e-mail : on cherche le dossier tout de
-      // suite, pour afficher son reste sans changer de page.
       if (cause instanceof ErreurApi && cause.code === "DUPLICATE_ENROLLMENT") {
+        setEtapeForm(1);
         void retrouveDossier(edition.id, valeurs.prenom.trim());
+      } else if (cause instanceof ErreurApi) {
+        setEtapeForm(1);
       }
     }
   }
@@ -609,6 +612,12 @@ export function FormulaireInscription({
           void verifiePaiement(refFinale, jeton)
             .then((verifie) => {
               notifyInscriptionMaj();
+              if (verifie.status === "SUCCESS") {
+                window.location.assign(
+                  `/paiement/retour?reference=${encodeURIComponent(refFinale)}`,
+                );
+                return;
+              }
               setPaiementVerifie(verifie);
             })
             .catch((cause) => {
@@ -619,6 +628,7 @@ export function FormulaireInscription({
             });
         },
         onCancel: () => {
+          void abandonnePaiement(lance.reference, jeton);
           setPaiementEnCours(false);
           setErreurPaiement(
             "Paiement annulé. Tu peux réessayer quand tu es prêt.",
@@ -797,12 +807,46 @@ export function FormulaireInscription({
     );
   }
 
+  function passeEtape2() {
+    const trouvees = verifie(valeurs, forfait, indicatifTel, indicatifBinome);
+    setErreurs(trouvees);
+    if (Object.keys(trouvees).length === 0) {
+      setEtapeForm(2);
+    }
+  }
+
   return (
     <form
-      onSubmit={envoie}
+      onSubmit={(e) => {
+        if (etapeForm === 1) {
+          e.preventDefault();
+          passeEtape2();
+          return;
+        }
+        void envoie(e);
+      }}
       noValidate
       className="flex flex-col gap-[clamp(1rem,2.5svh,1.5rem)]"
     >
+      <div className="space-y-2">
+        <div className="flex items-center justify-between font-mono text-xs text-fg/60">
+          <span>
+            Étape {etapeForm}/2 ·{" "}
+            {etapeForm === 1 ? "Session & coordonnées" : "Mode de règlement"}
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="h-1.5 rounded-full bg-[#2EE66B]" />
+          <div
+            className={`h-1.5 rounded-full transition-colors ${
+              etapeForm === 2 ? "bg-[#2EE66B]" : "bg-fg/15"
+            }`}
+          />
+        </div>
+      </div>
+
+      {etapeForm === 1 ? (
+        <>
       {/* Le forfait : solo, ou duo (2 places) quand le sprint le propose.
           Le prix duo est figé côté serveur à la réservation. */}
       {duoPropose ? (
@@ -1037,36 +1081,88 @@ export function FormulaireInscription({
         </div>
       ) : null}
 
-      {minimumActif < prixActif ? (
-        <ChoixPaiementPartiel
-          minimumXof={minimumActif}
-          resteXof={prixActif}
-          montant={Math.min(Math.max(montantChoisi, minimumActif), prixActif)}
-          onChangeMontant={setMontantChoisi}
-          conditionsAcceptees={conditionsPartielles}
-          onChangeConditions={setConditionsPartielles}
-        />
-      ) : null}
+          {erreurs.global && (
+            <p role="alert" className="text-small font-medium text-fg">
+              {erreurs.global}
+            </p>
+          )}
 
-      {erreurs.global && (
-        <p role="alert" className="text-small font-medium text-fg">
-          {erreurs.global}
-        </p>
+          <CtaButton
+            type="submit"
+            variante="vert"
+            pleineLargeur
+            className="mt-[clamp(0.25rem,1svh,0.75rem)]"
+          >
+            Continuer vers le règlement
+          </CtaButton>
+        </>
+      ) : (
+        <>
+          <div className="rounded-field border border-fg/15 bg-surface/60 px-3.5 py-2.5 text-small text-fg/80">
+            <strong className="text-fg">
+              {valeurs.prenom.trim()} {valeurs.nom.trim()}
+            </strong>{" "}
+            · {edition.nom} ({forfait === "DUO" ? "Duo · 2 places" : "Solo · 1 place"})
+          </div>
+
+          {minimumActif < prixActif ? (
+            <ChoixPaiementPartiel
+              minimumXof={minimumActif}
+              resteXof={prixActif}
+              montant={Math.min(Math.max(montantChoisi, minimumActif), prixActif)}
+              onChangeMontant={setMontantChoisi}
+              conditionsAcceptees={conditionsPartielles}
+              onChangeConditions={setConditionsPartielles}
+            />
+          ) : (
+            <div className="rounded-card border border-[#2EE66B]/40 bg-[#2EE66B]/10 p-4">
+              <p className="font-mono text-small uppercase tracking-[0.15em] text-fg/65">
+                Montant à régler
+              </p>
+              <p className="mt-1 text-h3 font-bold text-[#2EE66B]">
+                {prixActif.toLocaleString("fr-FR")} FCFA
+              </p>
+              <p className="mt-1 text-xs text-fg/70">
+                Paiement intégral — place garantie immédiatement.
+              </p>
+            </div>
+          )}
+
+          {erreurs.global && (
+            <p role="alert" className="text-small font-medium text-fg">
+              {erreurs.global}
+            </p>
+          )}
+
+          <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
+            <button
+              type="button"
+              onClick={() => setEtapeForm(1)}
+              disabled={etat === "envoi"}
+              className="shrink-0 rounded-pill border border-fg/20 px-6 py-3 font-mono text-small
+                         font-semibold text-fg/75 transition-colors
+                         hoverable:hover:border-fg/40 hoverable:hover:text-fg
+                         disabled:opacity-50"
+            >
+              Précédent
+            </button>
+
+            <div className="min-w-0 flex-1">
+              <CtaButton
+                type="submit"
+                variante="vert"
+                taille="sm"
+                disabled={etat === "envoi" || (estPartielForm && !conditionsPartielles)}
+                pleineLargeur
+              >
+                {etat === "envoi"
+                  ? "Ouverture du paiement…"
+                  : `Payer — ${Math.min(Math.max(montantChoisi, minimumActif), prixActif).toLocaleString("fr-FR")} FCFA`}
+              </CtaButton>
+            </div>
+          </div>
+        </>
       )}
-
-      <CtaButton
-        type="submit"
-        variante="vert"
-        disabled={etat === "envoi" || (estPartielForm && !conditionsPartielles)}
-        pleineLargeur
-        className="mt-[clamp(0.25rem,1svh,0.75rem)]"
-      >
-        {etat === "envoi"
-          ? "Envoi…"
-          : minimumActif < prixActif
-            ? `Réserver ma place — ${Math.min(Math.max(montantChoisi, minimumActif), prixActif).toLocaleString("fr-FR")} FCFA`
-            : "Réserver ma place"}
-      </CtaButton>
 
       {/* Pas de case à cocher de consentement tant que la politique de
           confidentialité n'existe pas : une case qui renvoie vers une page

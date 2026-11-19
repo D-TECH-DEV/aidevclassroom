@@ -1,4 +1,8 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Cancel01Icon,
@@ -39,7 +43,48 @@ export function Filtres({
   valeurRecherche?: string;
   placeholder: string;
 }) {
-  const aUnFiltre = Boolean(statutActuel || sprintActuel || valeurRecherche);
+  const router = useRouter();
+  const [enCours, demarrer] = useTransition();
+
+  const [sprintId, setSprintId] = useState(sprintActuel ?? "");
+  const [statut, setStatut] = useState(statutActuel ?? "");
+  const [recherche, setRecherche] = useState(valeurRecherche ?? "");
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setSprintId(sprintActuel ?? "");
+  }, [sprintActuel]);
+
+  useEffect(() => {
+    setStatut(statutActuel ?? "");
+  }, [statutActuel]);
+
+  useEffect(() => {
+    setRecherche(valeurRecherche ?? "");
+  }, [valeurRecherche]);
+
+  const appliquer = useCallback(
+    (next: { sprintId: string; statut: string; recherche: string }) => {
+      const qs = new URLSearchParams();
+      if (next.sprintId) qs.set("sprintId", next.sprintId);
+      if (next.statut) qs.set("statut", next.statut);
+      const qTrim = next.recherche.trim();
+      if (qTrim) qs.set(nomRecherche, qTrim);
+      const url = qs.toString() ? `${action}?${qs.toString()}` : action;
+      demarrer(() => {
+        router.push(url);
+      });
+    },
+    [action, nomRecherche, router],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  const aUnFiltre = Boolean(statut || sprintId || recherche.trim());
 
   const groupes = ORDRE_STATUTS.map((st) => ({
     statut: st,
@@ -51,6 +96,11 @@ export function Filtres({
     <form
       method="get"
       action={action}
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (timerRef.current) clearTimeout(timerRef.current);
+        appliquer({ sprintId, statut, recherche });
+      }}
       className="flex flex-wrap items-end gap-3 rounded-card border
                  border-fg/10 bg-surface/60 p-4"
     >
@@ -61,7 +111,12 @@ export function Filtres({
           </span>
           <select
             name="sprintId"
-            defaultValue={sprintActuel ?? ""}
+            value={sprintId}
+            onChange={(e) => {
+              const val = e.target.value;
+              setSprintId(val);
+              appliquer({ sprintId: val, statut, recherche });
+            }}
             className={`${champ} max-w-[18rem]`}
           >
             <option value="">Toutes les sessions</option>
@@ -87,7 +142,12 @@ export function Filtres({
         </span>
         <select
           name="statut"
-          defaultValue={statutActuel ?? ""}
+          value={statut}
+          onChange={(e) => {
+            const val = e.target.value;
+            setStatut(val);
+            appliquer({ sprintId, statut: val, recherche });
+          }}
           className={champ}
         >
           <option value="">Tous les statuts</option>
@@ -101,7 +161,7 @@ export function Filtres({
 
       <label className="flex flex-col gap-1.5">
         <span className="font-mono text-small uppercase tracking-[0.15em] text-fg/45">
-          Recherche
+          Recherche rapide
         </span>
         <div className="relative flex items-center">
           <HugeiconsIcon
@@ -112,29 +172,44 @@ export function Filtres({
           <input
             type="search"
             name={nomRecherche}
-            defaultValue={valeurRecherche ?? ""}
+            value={recherche}
+            onChange={(e) => {
+              const val = e.target.value;
+              setRecherche(val);
+              if (timerRef.current) clearTimeout(timerRef.current);
+              timerRef.current = setTimeout(() => {
+                appliquer({ sprintId, statut, recherche: val });
+              }, 250);
+            }}
             placeholder={placeholder}
             autoCapitalize="none"
             spellCheck={false}
-            className={`${champ} w-[clamp(12rem,36vw,19rem)] pl-9`}
+            className={`${champ} w-[clamp(13rem,36vw,21rem)] pl-9`}
           />
         </div>
       </label>
 
       <button
         type="submit"
+        disabled={enCours}
         className="inline-flex items-center gap-2 rounded-field border
                    border-fg/25 bg-bg/70 px-4 py-2 font-mono text-small
                    text-fg/85 transition-colors outline-none
-                   hover:border-accent/50 hover:text-fg focus-visible:border-fg"
+                   hover:border-accent/50 hover:text-fg focus-visible:border-fg disabled:opacity-50"
       >
         <HugeiconsIcon icon={FilterHorizontalIcon} size={14} />
-        <span>Filtrer</span>
+        <span>{enCours ? "Filtrage…" : "Filtrer"}</span>
       </button>
 
       {aUnFiltre ? (
         <Link
           href={action}
+          onClick={() => {
+            if (timerRef.current) clearTimeout(timerRef.current);
+            setSprintId("");
+            setStatut("");
+            setRecherche("");
+          }}
           className="inline-flex items-center gap-1.5 rounded-field border
                      border-fg/15 px-3 py-2 font-mono text-small text-fg/55
                      transition-colors hover:border-fg/30 hover:text-fg"

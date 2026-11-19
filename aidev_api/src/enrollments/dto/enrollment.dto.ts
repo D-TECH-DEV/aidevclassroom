@@ -64,6 +64,14 @@ export class LookupByEmailDto {
   phone?: string;
 }
 
+export class VerifyRecoveryOtpDto extends LookupByEmailDto {
+  @IsString()
+  @Matches(/^\d{6}$/, {
+    message: 'Le code de verification doit contenir 6 chiffres.',
+  })
+  code!: string;
+}
+
 export class ChangeEnrollmentStatusDto {
   @IsEnum(EnrollmentStatus)
   status!: EnrollmentStatus;

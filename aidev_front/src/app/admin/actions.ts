@@ -11,9 +11,11 @@ import {
   creerSprint,
   modifierContenuSite,
   modifierSprint,
+  notifierSelectionSprint,
   reverifie,
   supprimerSprint,
   traduitAdmin,
+  type NotificationSprintResult,
 } from "@/lib/admin/api";
 import {
   parseCreationSprint,
@@ -26,7 +28,11 @@ import type {
   StatutSprint,
 } from "@/lib/admin/types";
 
-export type Etat = { erreur?: string; succes?: boolean };
+export type Etat = {
+  erreur?: string;
+  succes?: boolean;
+  notification?: NotificationSprintResult | null;
+};
 export type EtatContenu = { erreur?: string; succes?: string };
 
 export async function connexion(
@@ -120,8 +126,10 @@ export async function modifierSprintExistant(
   const parsed = parseModificationSprint(donnees);
   if ("erreur" in parsed) return { erreur: parsed.erreur };
 
+  let notification: NotificationSprintResult | null = null;
   try {
-    await modifierSprint(parsed.id, parsed.patch);
+    const res = await modifierSprint(parsed.id, parsed.patch);
+    notification = res.notification ?? null;
   } catch (cause) {
     return { erreur: traduitAdmin(cause) };
   }
@@ -131,7 +139,7 @@ export async function modifierSprintExistant(
   revalidatePath("/admin");
   revalidatePath("/");
   if (donnees.get("mode") === "modale") {
-    return { succes: true };
+    return { succes: true, notification };
   }
   redirect("/admin/sprints");
 }
@@ -169,8 +177,15 @@ export async function changerStatutSprint(
     return { erreur: "Statut invalide." };
   }
 
+  const notifier = donnees.get("notifier") !== "non";
+  const note = String(donnees.get("noteNotification") ?? "").trim() || undefined;
+  let notification: NotificationSprintResult | null = null;
   try {
-    await changeStatutSprint(id, statut);
+    const res = await changeStatutSprint(id, statut, {
+      notifyParticipants: notifier,
+      notificationNote: note,
+    });
+    notification = res.notification ?? null;
   } catch (cause) {
     return { erreur: traduitAdmin(cause) };
   }
@@ -179,7 +194,34 @@ export async function changerStatutSprint(
   revalidatePath(`/admin/sprints/${id}`);
   revalidatePath("/admin");
   revalidatePath("/");
-  return {};
+  return { succes: true, notification };
+}
+
+export async function validerSelectionSprint(
+  _precedent: Etat,
+  donnees: FormData,
+): Promise<Etat> {
+  const id = Number(donnees.get("id"));
+  if (!Number.isInteger(id) || id <= 0) {
+    return { erreur: "Sprint introuvable." };
+  }
+  const notifier = donnees.get("notifier") !== "non";
+  const note = String(donnees.get("noteNotification") ?? "").trim() || undefined;
+  let notification: NotificationSprintResult | null = null;
+
+  try {
+    const res = await notifierSelectionSprint(id, {
+      notifyParticipants: notifier,
+      note,
+    });
+    notification = res.notifications?.[0] ?? null;
+  } catch (cause) {
+    return { erreur: traduitAdmin(cause) };
+  }
+
+  revalidatePath(`/admin/sprints/${id}`);
+  revalidatePath("/admin/sprints");
+  return { succes: true, notification };
 }
 
 export async function reverifiePaiement(

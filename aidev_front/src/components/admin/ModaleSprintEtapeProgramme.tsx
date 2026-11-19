@@ -69,6 +69,10 @@ export function EtapeProgramme({
   setModules,
   lancer,
   setLancer,
+  notifier,
+  setNotifier,
+  noteNotification,
+  setNoteNotification,
 }: {
   edition: boolean;
   sprint?: Sprint | null;
@@ -84,6 +88,10 @@ export function EtapeProgramme({
   setModules: (v: string) => void;
   lancer: boolean;
   setLancer: (v: boolean) => void;
+  notifier: boolean;
+  setNotifier: (v: boolean) => void;
+  noteNotification: string;
+  setNoteNotification: (v: string) => void;
 }) {
   return (
     <div className="flex flex-col gap-4">
@@ -172,12 +180,51 @@ export function EtapeProgramme({
           </span>
         </label>
       ) : (
-        <div className="rounded-field border border-fg/15 bg-bg/50 px-4 py-3 font-mono text-small text-fg/65">
-          Statut actuel :{" "}
-          <span className="font-bold text-accent">
-            {sprint ? LIBELLE_SPRINT[sprint.status] : "—"}
-          </span>{" "}
-          (modifiable directement depuis les boutons de la liste).
+        <div className="flex flex-col gap-3">
+          <div className="rounded-field border border-fg/15 bg-bg/50 px-4 py-3 font-mono text-small text-fg/65">
+            Statut actuel :{" "}
+            <span className="font-bold text-accent">
+              {sprint ? LIBELLE_SPRINT[sprint.status] : "—"}
+            </span>{" "}
+            (modifiable directement depuis les boutons de la liste).
+          </div>
+
+          {sprint?.status === "ACTIVE" ? (
+            <div className="flex flex-col gap-2.5 rounded-field border border-accent/30 bg-bg/60 px-4 py-3">
+              <label className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={notifier}
+                  onChange={(e) => setNotifier(e.target.checked)}
+                  className="mt-0.5 size-4 accent-[#2ee66b]"
+                />
+                <span className="flex flex-col">
+                  <span className={ETIQUETTE_CLS}>
+                    Notifier par e-mail les inscrits (avec acompte payé)
+                  </span>
+                  <span className="font-mono text-small text-fg/50">
+                    Un e-mail est envoyé uniquement si la date, la ville ou le lieu a changé.
+                  </span>
+                </span>
+              </label>
+
+              {notifier ? (
+                <label className="flex flex-col gap-1">
+                  <span className={ETIQUETTE_CLS}>
+                    Note complémentaire dans l&apos;e-mail (optionnel)
+                  </span>
+                  <input
+                    type="text"
+                    maxLength={500}
+                    value={noteNotification}
+                    onChange={(e) => setNoteNotification(e.target.value)}
+                    placeholder="Ex. Changement de salle pour mieux vous accueillir."
+                    className={CHAMP_CLS}
+                  />
+                </label>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       )}
     </div>

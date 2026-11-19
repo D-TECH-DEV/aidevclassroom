@@ -189,7 +189,7 @@ export async function recupereSprints(): Promise<Edition[]> {
     // 1) ACTIVE en cours ou à venir (`endAt >= maintenant`) par date de début croissante (le plus proche d'abord)
     // 2) ACTIVE déjà terminé (fallback)
     // 3) INACTIVE ("Bientôt") par date de début croissante
-    const page = await api<Page<Sprint>>("/sprints?page=1&limit=20", {
+    const page = await api<Page<Sprint>>("/sprints?page=1&limit=50", {
       revalider: 900,
     });
     const maintenant = Date.now();

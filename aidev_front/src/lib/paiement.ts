@@ -18,14 +18,15 @@ import { api, ErreurApi } from "@/lib/api";
  * sur la foi d'une redirection.
  *
  * ── Le jeton de suivi, et sa récupération ──────────────────────────
- * L'API renvoie le `trackingToken` à l'inscription, et le re-emet par
- * e-mail via `POST /enrollments/by-email` (rotation : l'ancien jeton est
- * remplacé). Il n'y a ni compte ni mot de passe : ce jeton EST la preuve
- * que le dossier est le nôtre. On le range dans `localStorage`, ce qui
- * veut dire qu'il ne survit ni à un autre appareil, ni à une navigation
- * privée, ni à un stockage vidé. Dans ce cas l'e-mail retrouve le dossier
- * (`retrouveDossiersParEmail`) et ce navigateur redevient capable de payer.
- * Sans OTP : quiconque connaît l'e-mail obtient l'accès — assumé.
+ * L'API renvoie le `trackingToken` à l'inscription, et le re-emet après
+ * vérification d'un code OTP à 6 chiffres envoyé par e-mail
+ * (`POST /enrollments/recovery/request` puis `/recovery/verify`). Il n'y
+ * a ni compte ni mot de passe : ce jeton EST la preuve que le dossier
+ * est le nôtre. On le range dans `localStorage`, ce qui veut dire qu'il
+ * ne survit ni à un autre appareil, ni à une navigation privée, ni à un
+ * stockage vidé. Dans ce cas le participant valide le code reçu par
+ * e-mail (`valideCodeRecuperation`) et ce navigateur redevient capable de
+ * payer.
  *
  * On range donc le jeton sous deux clés. Par identifiant d'inscription,
  * pour reprendre un dossier. Par référence de paiement, parce que Paystack
@@ -55,6 +56,8 @@ export type PaiementLance = {
 export type PaiementVerifie = {
   status: StatutPaiement;
   reference: string;
+  logicalReference?: string;
+  enrollmentId?: number;
   amountXof?: number;
   paidAt?: string | null;
   totalPaidXof?: number;
@@ -221,26 +224,55 @@ export type DossierRecupere = DossierSuivi & {
   partnerLastName?: string | null;
 };
 
-/**
- * Retrouve les dossiers d'un e-mail, depuis n'importe quel appareil.
- *
- * L'API re-emet un jeton de suivi par dossier (rotation) et le renvoie :
- * on le range aussitot dans ce navigateur, qui devient capable de payer
- * le reste. Sans OTP : quiconque connait l'e-mail obtient l'acces.
- */
-export async function retrouveDossiersParContact(contact: {
+export type SignatureRecu = {
+  sig: string;
+  exp: string;
+};
+
+function normaliseContactRecuperation(contact: {
   email?: string;
   phone?: string;
-}): Promise<DossierRecupere[]> {
+}) {
   const payload: { email?: string; phone?: string } = {};
   if (contact.email) payload.email = contact.email.trim().toLowerCase();
   if (contact.phone) payload.phone = contact.phone.trim();
+  return payload;
+}
 
-  const reponse = await api<{ dossiers: DossierRecupere[] }>(
-    `/enrollments/by-email`,
+/**
+ * Etape 1 de récupération : demande l'envoi d'un code OTP à 6 chiffres à
+ * l'adresse e-mail associée au dossier (réponse toujours neutre côté API).
+ */
+export async function demandeCodeRecuperation(contact: {
+  email?: string;
+  phone?: string;
+}): Promise<{ sent: boolean; expiresInSeconds: number }> {
+  return api<{ sent: boolean; expiresInSeconds: number }>(
+    `/enrollments/recovery/request`,
     {
       method: "POST",
-      body: JSON.stringify(payload),
+      body: JSON.stringify(normaliseContactRecuperation(contact)),
+      cache: "no-store",
+    },
+  );
+}
+
+/**
+ * Etape 2 de récupération : valide le code OTP et enregistre les jetons
+ * reçus dans ce navigateur.
+ */
+export async function valideCodeRecuperation(
+  contact: { email?: string; phone?: string },
+  code: string,
+): Promise<DossierRecupere[]> {
+  const reponse = await api<{ dossiers: DossierRecupere[] }>(
+    `/enrollments/recovery/verify`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        ...normaliseContactRecuperation(contact),
+        code: code.trim(),
+      }),
       cache: "no-store",
     },
   );
@@ -248,12 +280,6 @@ export async function retrouveDossiersParContact(contact: {
     rangeJetonSuivi(dossier.id, dossier.trackingToken);
   }
   return reponse.dossiers;
-}
-
-export async function retrouveDossiersParEmail(
-  email: string,
-): Promise<DossierRecupere[]> {
-  return retrouveDossiersParContact({ email });
 }
 
 /* ── Appels ──────────────────────────────────────────────────────────── */
@@ -339,12 +365,81 @@ export function adressePaiementValide(adresse: string): boolean {
 
 export async function verifiePaiement(
   reference: string,
-  jeton: string,
+  jeton: string | null,
+  signature?: SignatureRecu,
 ): Promise<PaiementVerifie> {
+  const extraHeaders: Record<string, string> = {};
+  if (!jeton && signature) {
+    extraHeaders["x-receipt-sig"] = signature.sig;
+    extraHeaders["x-receipt-exp"] = signature.exp;
+  }
   return api<PaiementVerifie>(`/payments/${encodeURIComponent(reference)}/verify`, {
-    jetonSuivi: jeton,
+    ...(jeton ? { jetonSuivi: jeton } : {}),
+    headers: extraHeaders,
     cache: "no-store",
   });
+}
+
+export async function abandonnePaiement(
+  reference: string,
+  jeton: string,
+): Promise<void> {
+  try {
+    await api(`/payments/${encodeURIComponent(reference)}/cancel`, {
+      method: "POST",
+      jetonSuivi: jeton,
+      cache: "no-store",
+    });
+  } catch {
+    // Echec silencieux : le back nettoiera aussi a la prochaine tentative.
+  }
+}
+
+export async function telechargeRecuPaiement(
+  reference: string,
+  jeton: string | null,
+  signature?: SignatureRecu,
+): Promise<void> {
+  const headers: Record<string, string> = {};
+  if (jeton) {
+    headers["x-tracking-token"] = jeton;
+  } else if (signature) {
+    headers["x-receipt-sig"] = signature.sig;
+    headers["x-receipt-exp"] = signature.exp;
+  }
+  const res = await fetch(
+    `/api/payments/${encodeURIComponent(reference)}/receipt`,
+    {
+      headers,
+      cache: "no-store",
+    },
+  );
+  if (!res.ok) {
+    throw new Error("Impossible de télécharger le reçu pour le moment.");
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `recu-aidevclassroom-${reference}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+export async function renvoieRecuParEmail(
+  reference: string,
+  jeton: string,
+): Promise<{ sent: boolean; email: string }> {
+  return api<{ sent: boolean; email: string }>(
+    `/payments/${encodeURIComponent(reference)}/receipt/email`,
+    {
+      method: "POST",
+      jetonSuivi: jeton,
+      cache: "no-store",
+    },
+  );
 }
 
 /* ── Messages ────────────────────────────────────────────────────────── */
@@ -418,7 +513,16 @@ export function traduitPaiement(erreur: unknown): string {
     case "PAYMENT_VERIFICATION_MISMATCH":
       return `Le paiement ne correspond pas à ce qui était attendu. Ne repaie surtout pas. ${SECOURS_WHATSAPP}`;
 
+    case "RECOVERY_OTP_INVALID":
+      return "Code invalide ou expiré. Vérifie ton e-mail ou demande un nouveau code.";
+
+    case "TOO_MANY_REQUESTS":
+      return "Trop de tentatives. Patiente une minute avant de réessayer.";
+
     default:
+      if (erreur.statusCode === 429) {
+        return "Trop de tentatives. Patiente une minute avant de réessayer.";
+      }
       return erreur.statusCode >= 500
         ? `Le serveur a eu un problème. ${SECOURS_WHATSAPP}`
         : erreur.message;

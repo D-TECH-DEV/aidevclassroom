@@ -45,9 +45,10 @@ COPY --from=build --chown=node:node /app/dist ./dist
 COPY --from=build --chown=node:node /app/package*.json ./
 COPY --from=build --chown=node:node /app/prisma ./prisma
 COPY --from=build --chown=node:node /app/prisma.config.ts ./prisma.config.ts
+RUN mkdir -p /app/uploads/formateurs && chown -R node:node /app/uploads
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
-  CMD wget -qO- http://localhost:3000/api/v1/health | grep -q '"status":"ok"' || exit 1
+  CMD wget -qO- http://127.0.0.1:3000/api/v1/health | grep -q '"status":"ok"' || exit 1
 # Démarrage pur : aucune migration ni seed ici (voir scripts/migrate.sh).
 CMD ["node", "dist/main"]

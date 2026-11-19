@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 
 import {
   exigeSession,
+  notificationsSprints,
   sessionPerdue,
   sprints,
   traduitAdmin,
@@ -34,6 +35,9 @@ import {
   BoutonModifierSprint,
   BoutonNouveauSprint,
 } from "@/components/admin/ActionsSprint";
+import { ToastNotificationMail } from "@/components/admin/ToastNotificationMail";
+import { ListeNotificationsSprint } from "@/components/admin/ListeNotificationsSprint";
+import { FiltreStatutSprints } from "@/components/admin/FiltreStatutSprints";
 
 /**
  * `/admin/sprints` — la liste des sessions, filtrable par statut.
@@ -67,6 +71,8 @@ export default function PageSprints({ searchParams }: Params) {
       >
         <Contenu searchParams={searchParams} />
       </Suspense>
+
+      <ToastNotificationMail />
     </>
   );
 }
@@ -80,14 +86,64 @@ async function Contenu({ searchParams }: Params) {
   await exigeSession();
 
   const params = await searchParams;
+  const vue = premier(params.vue);
+  const estVueNotifs = vue === "notifications";
   const statut = premier(params.statut);
   const page = Math.max(1, Number(premier(params.page) ?? 1) || 1);
+
+  if (estVueNotifs) {
+    let notifs;
+    try {
+      notifs = await notificationsSprints({ page });
+    } catch (cause) {
+      if (sessionPerdue(cause)) redirect("/admin/connexion?expiree=1");
+      return (
+        <div className="mt-6">
+          <Alerte>{traduitAdmin(cause)}</Alerte>
+        </div>
+      );
+    }
+
+    return (
+      <>
+        <div
+          className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-card border
+                     border-fg/10 bg-surface/60 p-4"
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/admin/sprints"
+              className="rounded-field border border-fg/20 bg-bg/60 px-3.5 py-2 font-mono text-small text-fg/75 transition-colors hover:border-fg/40 hover:text-fg"
+            >
+              Sprints
+            </Link>
+            <Link
+              href="/admin/sprints?vue=notifications"
+              className="rounded-field border border-accent/60 bg-accent/15 px-3.5 py-2 font-mono text-small font-semibold text-accent"
+            >
+              Notification sprint
+            </Link>
+          </div>
+          <p className="font-mono text-small text-fg/50">
+            Historique des e-mails envoyés aux inscrits
+          </p>
+        </div>
+
+        <ListeNotificationsSprint
+          items={notifs.items}
+          total={notifs.total}
+          page={notifs.page}
+          limit={notifs.limit}
+        />
+      </>
+    );
+  }
 
   let liste;
   try {
     liste = await sprints({ page, statut });
   } catch (cause) {
-    if (sessionPerdue(cause)) redirect("/admin/connexion");
+    if (sessionPerdue(cause)) redirect("/admin/connexion?expiree=1");
     return (
       <div className="mt-6">
         <Alerte>{traduitAdmin(cause)}</Alerte>
@@ -97,40 +153,27 @@ async function Contenu({ searchParams }: Params) {
 
   return (
     <>
-      <form
-        method="get"
-        action="/admin/sprints"
-        className="mt-6 flex flex-wrap items-end gap-3 rounded-card border
+      <div
+        className="mt-6 flex flex-wrap items-end justify-between gap-4 rounded-card border
                    border-fg/10 bg-surface/60 p-4"
       >
-        <label className="flex flex-col gap-1.5">
-          <span className="font-mono text-small uppercase tracking-[0.15em] text-fg/45">
-            Filtrer par statut
-          </span>
-          <select
-            name="statut"
-            defaultValue={statut ?? ""}
-            className="rounded-field border border-fg/20 bg-bg px-3 py-2
-                       font-mono text-small text-fg outline-none
-                       focus-visible:border-accent/60"
+        <FiltreStatutSprints statuts={STATUTS} statutActuel={statut} />
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/admin/sprints"
+            className="rounded-field border border-accent/60 bg-accent/15 px-3.5 py-2 font-mono text-small font-semibold text-accent"
           >
-            <option value="">Tous les statuts</option>
-            {STATUTS.map((s) => (
-              <option key={s.valeur} value={s.valeur}>
-                {s.libelle}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          type="submit"
-          className="rounded-field border border-fg/25 bg-bg/70 px-4 py-2
-                     font-mono text-small text-fg/85 transition-colors outline-none
-                     hover:border-accent/50 hover:text-fg focus-visible:border-fg"
-        >
-          Filtrer
-        </button>
-      </form>
+            Sprints
+          </Link>
+          <Link
+            href="/admin/sprints?vue=notifications"
+            className="rounded-field border border-fg/20 bg-bg/60 px-3.5 py-2 font-mono text-small text-fg/75 transition-colors hover:border-accent/50 hover:text-fg"
+          >
+            Notification sprint
+          </Link>
+        </div>
+      </div>
 
       <div className="mt-6">
         <Cadre titre={`${liste.total} sprint${liste.total > 1 ? "s" : ""}`}>
@@ -219,7 +262,11 @@ async function Contenu({ searchParams }: Params) {
                       <Cellule>
                         <div className="flex flex-col items-start gap-2">
                           <BoutonModifierSprint sprint={s} />
-                          <BoutonSupprimerSprint id={s.id} nom={s.name} />
+                          {!s.hasEnrollments &&
+                          (s.enrolledSeats ?? 0) === 0 &&
+                          (s.enrolledCount ?? 0) === 0 ? (
+                            <BoutonSupprimerSprint id={s.id} nom={s.name} />
+                          ) : null}
                         </div>
                       </Cellule>
                     </Ligne>

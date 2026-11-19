@@ -34,7 +34,7 @@ const REVALIDATION_SECONDES = 0;
 export const CONTENU_SITE_VIDE: ContenuSite = {
   whatsappDisplay: "07 04 92 10 80",
   whatsappHref: "https://wa.me/2250704921080",
-  contactEmail: "contact@aidevclassroom.com",
+  contactEmail: "contact@ai-devclassroom.com",
   trainers: [],
   faqs: [],
 };

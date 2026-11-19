@@ -10,10 +10,13 @@ import {
   lancePaiement,
   litTrace,
   rangeTrace,
+  renvoieRecuParEmail,
   SECOURS_WHATSAPP,
+  telechargeRecuPaiement,
   traduitPaiement,
   verifiePaiement,
   type PaiementVerifie,
+  type SignatureRecu,
   type TracePaiement,
 } from "@/lib/paiement";
 
@@ -47,7 +50,14 @@ type Etat =
   | { phase: "sans-reference" }
   | { phase: "sans-jeton"; reference: string }
   | { phase: "verification"; reference: string }
-  | { phase: "verifie"; reference: string; paiement: PaiementVerifie; trace: TracePaiement }
+  | {
+      phase: "verifie";
+      reference: string;
+      paiement: PaiementVerifie;
+      trace: TracePaiement;
+      lectureSeule: boolean;
+      signature?: SignatureRecu;
+    }
   | { phase: "erreur"; reference: string; message: string; reprenable: boolean };
 
 function Cadre({
@@ -83,11 +93,17 @@ function Texte({ children }: { children: React.ReactNode }) {
   return <p className="max-w-[46ch] text-body text-fg/70">{children}</p>;
 }
 
-/** La référence Paystack, affichée pour qu'on puisse la citer sur WhatsApp. */
-function Reference({ reference }: { reference: string }) {
+/** La référence affichée pour le suivi du paiement. */
+function Reference({
+  reference,
+  libelle = "Référence",
+}: {
+  reference: string;
+  libelle?: string;
+}) {
   return (
     <p className="font-mono text-small text-fg/45">
-      Référence : <span className="select-all text-fg/70">{reference}</span>
+      {libelle} : <span className="select-all text-fg/70">{reference}</span>
     </p>
   );
 }
@@ -95,6 +111,8 @@ function Reference({ reference }: { reference: string }) {
 export function RetourPaiement() {
   const parametres = useSearchParams();
   const reference = parametres.get("reference") ?? parametres.get("trxref");
+  const sigParam = parametres.get("sig");
+  const expParam = parametres.get("exp");
 
   const [etat, setEtat] = useState<Etat>(() =>
     reference ? { phase: "verification", reference } : { phase: "sans-reference" },
@@ -105,9 +123,12 @@ export function RetourPaiement() {
   // rangée avant de partir — sans elle, le retour ne remonterait pas.
   const [complementEnCours, setComplementEnCours] = useState(false);
   const [erreurComplement, setErreurComplement] = useState<string | null>(null);
+  const [telechargementEnCours, setTelechargementEnCours] = useState(false);
+  const [envoiMailEnCours, setEnvoiMailEnCours] = useState(false);
+  const [messageRecu, setMessageRecu] = useState<string | null>(null);
 
   async function paieReste() {
-    if (etat.phase !== "verifie" || complementEnCours) return;
+    if (etat.phase !== "verifie" || etat.lectureSeule || complementEnCours) return;
     const reste = etat.paiement.remainingAmountXof;
     if (reste === undefined || reste <= 0) return;
 
@@ -139,8 +160,14 @@ export function RetourPaiement() {
 
     // Le `localStorage` ne se lit pas pendant le rendu serveur : cette
     // fonction ne tourne que dans un effet, donc après l'hydratation.
-    const trace = litTrace(reference);
-    if (!trace) {
+    const traceLocale = litTrace(reference);
+    const jeton = traceLocale?.jeton ?? null;
+    const signature =
+      !jeton && sigParam?.trim() && expParam?.trim()
+        ? { sig: sigParam.trim(), exp: expParam.trim() }
+        : undefined;
+
+    if (!jeton && !signature) {
       setEtat({ phase: "sans-jeton", reference });
       return;
     }
@@ -148,8 +175,23 @@ export function RetourPaiement() {
     setEtat({ phase: "verification", reference });
 
     try {
-      const paiement = await verifiePaiement(reference, trace.jeton);
-      setEtat({ phase: "verifie", reference, paiement, trace });
+      const paiement = await verifiePaiement(reference, jeton, signature);
+      const idInscription =
+        traceLocale?.idInscription ?? paiement.enrollmentId ?? 0;
+      const trace: TracePaiement = traceLocale ?? {
+        idInscription: Number.isFinite(idInscription) ? idInscription : 0,
+        jeton: "",
+        prenom: "",
+        montantXof: paiement.amountXof ?? 0,
+      };
+      setEtat({
+        phase: "verifie",
+        reference,
+        paiement,
+        trace,
+        lectureSeule: !jeton,
+        signature,
+      });
     } catch (cause) {
       setEtat({
         phase: "erreur",
@@ -163,7 +205,7 @@ export function RetourPaiement() {
           (cause instanceof ErreurApi && cause.code === "PAYSTACK_VERIFY_FAILED"),
       });
     }
-  }, [reference]);
+  }, [reference, sigParam, expParam]);
 
   useEffect(() => {
     void verifie();
@@ -231,7 +273,7 @@ export function RetourPaiement() {
     );
   }
 
-  const { paiement, trace } = etat;
+  const { paiement, trace, lectureSeule, signature } = etat;
 
   if (paiement.status === "SUCCESS") {
     // L'API renvoie le solde de l'inscription, pas celui du versement :
@@ -241,27 +283,120 @@ export function RetourPaiement() {
     const reste = paiement.remainingAmountXof;
     const solde = reste === undefined || reste === 0;
 
+    const refCourante = etat.reference;
+
+    async function telecharge() {
+      if (telechargementEnCours) return;
+      setTelechargementEnCours(true);
+      setMessageRecu(null);
+      try {
+        await telechargeRecuPaiement(
+          refCourante,
+          lectureSeule ? null : trace.jeton,
+          signature,
+        );
+      } catch {
+        setMessageRecu("Impossible de télécharger le reçu pour le moment.");
+      } finally {
+        setTelechargementEnCours(false);
+      }
+    }
+
+    async function renvoieMail() {
+      if (envoiMailEnCours || lectureSeule || !trace.jeton) return;
+      setEnvoiMailEnCours(true);
+      setMessageRecu(null);
+      try {
+        const res = await renvoieRecuParEmail(refCourante, trace.jeton);
+        setMessageRecu(
+          res.sent
+            ? `Reçu envoyé par e-mail à ${res.email}.`
+            : "Envoi d'e-mail indisponible pour le moment (vérifie la configuration Resend).",
+        );
+      } catch {
+        setMessageRecu("Impossible d'envoyer le reçu par e-mail pour le moment.");
+      } finally {
+        setEnvoiMailEnCours(false);
+      }
+    }
+
     return (
       <Cadre ton="succes">
         <Titre>
           {solde
-            ? `C'est réglé, ${trace.prenom}.`
-            : `Paiement reçu, ${trace.prenom}.`}
+            ? trace.prenom
+              ? `C'est réglé, ${trace.prenom}.`
+              : "C'est réglé."
+            : trace.prenom
+              ? `Paiement reçu, ${trace.prenom}.`
+              : "Paiement reçu."}
         </Titre>
         <Texte>
           {solde
             ? "Ta place est confirmée. On te retrouve le jour J."
             : `Il reste ${reste.toLocaleString("fr-FR")} FCFA à verser pour confirmer ta place.`}
         </Texte>
-        <Reference reference={etat.reference} />
+        <p className="font-mono text-xs text-fg/65">
+          {trace.email
+            ? `Un reçu officiel PDF a été envoyé à ${trace.email}.`
+            : "Un reçu officiel PDF est envoyé automatiquement à ton adresse e-mail."}
+        </p>
+        <Reference
+          reference={paiement.logicalReference ?? etat.reference}
+          libelle="Référence de paiement"
+        />
+
+        <div className="flex w-full flex-col gap-3 sm:flex-row">
+          <div className="min-w-0 flex-1">
+            <CtaButton
+              type="button"
+              variante="vert"
+              taille="sm"
+              pleineLargeur
+              disabled={telechargementEnCours}
+              onClick={() => void telecharge()}
+            >
+              {telechargementEnCours
+                ? "Téléchargement…"
+                : "Télécharger mon reçu (PDF)"}
+            </CtaButton>
+          </div>
+          {!lectureSeule && trace.jeton ? (
+            <button
+              type="button"
+              disabled={envoiMailEnCours}
+              onClick={() => void renvoieMail()}
+              className="shrink-0 rounded-pill border border-fg/25 px-6 py-3 font-mono text-small
+                         font-semibold text-fg/85 transition-colors
+                         hoverable:hover:border-accent/60 hoverable:hover:text-accent
+                         disabled:opacity-50"
+            >
+              {envoiMailEnCours ? "Envoi…" : "Renvoyer par e-mail"}
+            </button>
+          ) : null}
+        </div>
+
+        {messageRecu ? (
+          <p role="status" className="font-mono text-small text-accent">
+            {messageRecu}
+          </p>
+        ) : null}
+
         {solde ? (
-          <CtaButton href="/">Retour à l&apos;accueil</CtaButton>
+          <CtaButton href="/" taille="sm">
+            Retour à l&apos;accueil
+          </CtaButton>
+        ) : lectureSeule ? (
+          <CtaButton href="/paiement/reprendre" taille="sm">
+            Régler le reste (vérification par code)
+          </CtaButton>
         ) : (
           <>
             <CtaButton
               type="button"
               onClick={() => void paieReste()}
               disabled={complementEnCours}
+              taille="sm"
             >
               {complementEnCours
                 ? "Ouverture du paiement…"
@@ -272,7 +407,7 @@ export function RetourPaiement() {
                 {erreurComplement}
               </p>
             ) : null}
-            <CtaButton href="/paiement/reprendre">
+            <CtaButton href="/paiement/reprendre" taille="sm">
               Je paierai plus tard
             </CtaButton>
           </>
@@ -290,7 +425,10 @@ export function RetourPaiement() {
           normal : ça prend parfois une minute. Recharge cette page dans un
           instant, ou garde la référence sous la main.
         </Texte>
-        <Reference reference={etat.reference} />
+        <Reference
+          reference={paiement.logicalReference ?? etat.reference}
+          libelle="Référence de paiement"
+        />
         <CtaButton type="button" onClick={() => void verifie()}>
           Vérifier à nouveau
         </CtaButton>

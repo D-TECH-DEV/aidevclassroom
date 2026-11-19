@@ -81,7 +81,7 @@ export type FiltresInscriptions = {
 
 export function inscriptions({
   page = 1,
-  limit = 20,
+  limit = 50,
   statut,
   recherche,
   sprintId,
@@ -111,7 +111,7 @@ export type FiltresPaiements = {
 
 export function paiements({
   page = 1,
-  limit = 20,
+  limit = 50,
   statut,
   reference,
   sprintId,
@@ -144,11 +144,44 @@ export type NouveauSprint = {
   status?: StatutSprint;
 };
 
-export type SprintModifie = Partial<NouveauSprint>;
+export type NotificationSprintResult = {
+  kind:
+    | "SCHEDULE_OR_LOCATION_UPDATED"
+    | "POSTPONED_OR_SUSPENDED"
+    | "SESSION_REACTIVATED"
+    | "SELECTION_SELECTED"
+    | "SELECTION_WAITLIST";
+  queued?: boolean;
+  notificationId?: number;
+  sentCount: number;
+  failedCount: number;
+  recipients: Array<{ email: string; name: string; sent: boolean }>;
+};
+
+export type SprintNotificationItem = {
+  id: number;
+  sprintId: number;
+  kind: NotificationSprintResult["kind"];
+  status: string;
+  subject: string | null;
+  htmlContent: string | null;
+  note: string | null;
+  totalRecipients: number;
+  sentCount: number;
+  failedCount: number;
+  recipients: Array<{ email: string; name: string; sent: boolean }>;
+  createdAt: string;
+  sprint: { id: number; name: string; slug: string };
+};
+
+export type SprintModifie = Partial<NouveauSprint> & {
+  notifyParticipants?: boolean;
+  notificationNote?: string;
+};
 
 export function sprints({
   page = 1,
-  limit = 20,
+  limit = 50,
   statut,
 }: {
   page?: number;
@@ -173,13 +206,107 @@ export function sprint(id: number) {
   return apiAdmin<Sprint>(`/admin/sprints/${id}`);
 }
 
-export function modifierSprint(id: number, donnees: SprintModifie) {
-  return apiAdmin<Sprint>(`/sprints/${id}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(donnees),
-    cache: "no-store",
+export type SelectionEntry = {
+  rank: number;
+  enrollmentId: number;
+  studentId: number;
+  studentName: string;
+  email: string;
+  phone: string;
+  plan: string;
+  seats: number;
+  status: string;
+  totalAmountXof: number;
+  paidXof: number;
+  remainingXof: number;
+  paidPercent: number;
+  refundableTwoThirdsXof: number;
+  firstPaidAt: string | null;
+  createdAt: string;
+};
+
+export type SprintSelectionPayload = {
+  sprint: Sprint;
+  capacity: number | null;
+  seatsUsed: number;
+  seatsRemaining: number | null;
+  selectedCount: number;
+  waitlistCount: number;
+  unpaidCount: number;
+  totalRefundableTwoThirdsXof: number;
+  group: "selected" | "waitlist" | "unpaid";
+  items: SelectionEntry[];
+  total: number;
+  page: number;
+  limit: number;
+};
+
+export function selectionSprint(
+  id: number,
+  {
+    group = "selected",
+    page = 1,
+    limit = 50,
+    search,
+  }: {
+    group?: "selected" | "waitlist" | "unpaid";
+    page?: number;
+    limit?: number;
+    search?: string;
+  } = {},
+) {
+  const q = new URLSearchParams({
+    group,
+    page: String(page),
+    limit: String(limit),
   });
+  if (search) q.set("search", search);
+  return apiAdmin<SprintSelectionPayload>(
+    `/admin/sprints/${id}/selection?${q}`,
+    {
+      cache: "no-store",
+    },
+  );
+}
+
+export function notifierSelectionSprint(
+  id: number,
+  opts?: { notifyParticipants?: boolean; note?: string },
+) {
+  return apiAdmin<
+    Omit<SprintSelectionPayload, "sprint"> & {
+      notifications: NotificationSprintResult[];
+    }
+  >(`/admin/sprints/${id}/selection/notify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(opts ?? {}),
+  });
+}
+
+export function notificationsSprints({
+  page = 1,
+  limit = 50,
+}: {
+  page?: number;
+  limit?: number;
+} = {}) {
+  const q = new URLSearchParams({ page: String(page), limit: String(limit) });
+  return apiAdmin<Page<SprintNotificationItem>>(
+    `/admin/sprints/notifications?${q}`,
+  );
+}
+
+export function modifierSprint(id: number, donnees: SprintModifie) {
+  return apiAdmin<Sprint & { notification?: NotificationSprintResult | null }>(
+    `/sprints/${id}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(donnees),
+      cache: "no-store",
+    },
+  );
 }
 
 export function supprimerSprint(id: number) {
@@ -189,12 +316,25 @@ export function supprimerSprint(id: number) {
   });
 }
 
-export function changeStatutSprint(id: number, statut: StatutSprint) {
-  return apiAdmin<Sprint>(`/sprints/${id}/status`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ status: statut }),
-  });
+export function changeStatutSprint(
+  id: number,
+  statut: StatutSprint,
+  opts?: { notifyParticipants?: boolean; notificationNote?: string },
+) {
+  return apiAdmin<Sprint & { notification?: NotificationSprintResult | null }>(
+    `/sprints/${id}/status`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        status: statut,
+        ...(opts?.notifyParticipants !== undefined
+          ? { notifyParticipants: opts.notifyParticipants }
+          : {}),
+        ...(opts?.notificationNote ? { notificationNote: opts.notificationNote } : {}),
+      }),
+    },
+  );
 }
 
 /* ── Écritures ───────────────────────────────────────────────────────── */
@@ -285,7 +425,9 @@ export function traduitAdmin(cause: unknown): string {
     case "SPRINT_HAS_ENROLLMENTS":
       return "Des inscriptions existent : désactive ou termine le sprint au lieu de le supprimer.";
     case "SPRINT_NOT_FOUND":
-      return "Ce sprint n'existe pas."
+      return "Ce sprint n'existe pas.";
+    case "TOO_MANY_REQUESTS":
+      return "Trop de requêtes. Patiente une minute avant de réessayer.";
     default:
       return cause.statusCode >= 500
         ? `Erreur serveur (${cause.code}).`

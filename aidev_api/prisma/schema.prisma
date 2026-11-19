@@ -43,6 +43,7 @@ model User {
   passwordHash String   @map("password_hash") @db.VarChar(255)
   role         UserRole @default(ADMIN)
   isActive     Boolean  @default(true) @map("is_active")
+  tokenVersion Int      @default(0) @map("token_version")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
@@ -83,8 +84,9 @@ model Sprint {
   modules              Json?
   status               SprintStatus @default(DRAFT)
   createdAt            DateTime     @default(now()) @map("created_at")
-  updatedAt            DateTime     @updatedAt @map("updated_at")
+  updatedAt            DateTime             @updatedAt @map("updated_at")
   enrollments          Enrollment[]
+  notifications        SprintNotification[]
 
   @@index([status])
   @@map("sprints")
@@ -125,6 +127,7 @@ model Payment {
   status            PaymentStatus @default(PENDING)
   authorizationUrl  String?       @map("authorization_url") @db.Text
   paidAt            DateTime?     @map("paid_at")
+  receiptSentAt     DateTime?     @map("receipt_sent_at")
   providerResponse  Json?         @map("provider_response")
   createdAt         DateTime      @default(now()) @map("created_at")
   updatedAt         DateTime      @updatedAt @map("updated_at")
@@ -177,4 +180,24 @@ model FaqItem {
 
   @@index([sortOrder])
   @@map("faqs")
+}
+
+model SprintNotification {
+  id              Int      @id @default(autoincrement())
+  sprintId        Int      @map("sprint_id")
+  kind            String   @db.VarChar(60)
+  status          String   @default("COMPLETED") @db.VarChar(20)
+  subject         String?  @db.VarChar(255)
+  htmlContent     String?  @map("html_content") @db.Text
+  note            String?  @db.Text
+  totalRecipients Int      @default(0) @map("total_recipients")
+  sentCount       Int      @map("sent_count")
+  failedCount     Int      @map("failed_count")
+  recipients      Json
+  createdAt       DateTime @default(now()) @map("created_at")
+  sprint          Sprint   @relation(fields: [sprintId], references: [id], onDelete: Cascade)
+
+  @@index([sprintId])
+  @@index([createdAt])
+  @@map("sprint_notifications")
 }

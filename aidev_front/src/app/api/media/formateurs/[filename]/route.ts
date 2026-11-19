@@ -12,9 +12,18 @@ export async function GET(
     return NextResponse.json({ message: "Introuvable." }, { status: 404 });
   }
 
-  const res = await fetch(`${BASE_API}/uploads/formateurs/${filename}`, {
-    cache: "no-store",
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_API}/uploads/formateurs/${filename}`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch {
+    return NextResponse.json(
+      { message: "Service média indisponible." },
+      { status: 502 },
+    );
+  }
   if (!res.ok) {
     return NextResponse.json({ message: "Introuvable." }, { status: res.status });
   }
@@ -24,6 +33,7 @@ export async function GET(
     status: 200,
     headers: {
       "Content-Type": "image/png",
+      "X-Content-Type-Options": "nosniff",
       "Cache-Control": "public, max-age=31536000, immutable",
     },
   });

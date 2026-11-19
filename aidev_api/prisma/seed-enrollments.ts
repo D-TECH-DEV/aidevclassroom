@@ -213,30 +213,38 @@ export async function seedEnrollmentsAndPayments(
         ? sprint.duoPriceXof
         : sprint.priceXof;
 
-    const enrollment = await prisma.enrollment.upsert({
+    const existingEnrollment = await prisma.enrollment.findFirst({
       where: {
-        studentId_sprintId: { studentId: student.id, sprintId: sprint.id },
-      },
-      update: {
-        plan: item.plan,
-        partnerFirstName: item.partnerFirstName ?? null,
-        partnerLastName: item.partnerLastName ?? null,
-        partnerPhone: item.partnerPhone ?? null,
-        totalAmountXof,
-        status: item.status,
-      },
-      create: {
         studentId: student.id,
         sprintId: sprint.id,
-        plan: item.plan,
-        partnerFirstName: item.partnerFirstName ?? null,
-        partnerLastName: item.partnerLastName ?? null,
-        partnerPhone: item.partnerPhone ?? null,
-        totalAmountXof,
-        status: item.status,
-        trackingTokenHash: hashToken(`seed-${item.email}-${sprint.slug}`),
+        status: { not: 'CANCELLED' },
       },
     });
+    const enrollment = existingEnrollment
+      ? await prisma.enrollment.update({
+          where: { id: existingEnrollment.id },
+          data: {
+            plan: item.plan,
+            partnerFirstName: item.partnerFirstName ?? null,
+            partnerLastName: item.partnerLastName ?? null,
+            partnerPhone: item.partnerPhone ?? null,
+            totalAmountXof,
+            status: item.status,
+          },
+        })
+      : await prisma.enrollment.create({
+          data: {
+            studentId: student.id,
+            sprintId: sprint.id,
+            plan: item.plan,
+            partnerFirstName: item.partnerFirstName ?? null,
+            partnerLastName: item.partnerLastName ?? null,
+            partnerPhone: item.partnerPhone ?? null,
+            totalAmountXof,
+            status: item.status,
+            trackingTokenHash: hashToken(`seed-${item.email}-${sprint.slug}`),
+          },
+        });
 
     for (const pay of item.payments) {
       await prisma.payment.upsert({

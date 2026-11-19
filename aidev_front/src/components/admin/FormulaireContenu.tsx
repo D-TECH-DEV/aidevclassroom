@@ -167,7 +167,7 @@ export function FormulaireContenu({ initial }: { initial: ContenuSiteAdmin }) {
               maxLength={180}
               value={contactEmail}
               onChange={(e) => setContactEmail(e.target.value)}
-              placeholder="contact@aidevclassroom.com"
+              placeholder="contact@ai-devclassroom.com"
               className={`${champ} font-mono`}
             />
           </label>

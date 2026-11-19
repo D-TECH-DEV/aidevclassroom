@@ -33,9 +33,11 @@ const PUBLIQUES = new Set([
   "site-content",
   "enrollments",
   "payments",
-  "students",
   "health",
 ]);
+
+const MAX_BODY_BYTES = 256 * 1024;
+const RELAY_TIMEOUT_MS = 15_000;
 
 function refuse() {
   return Response.json(
@@ -58,6 +60,34 @@ async function relaie(requete: Request, chemin: string[]) {
 
   const racine = chemin[0];
   if (!racine || !PUBLIQUES.has(racine)) return refuse();
+  if (racine === "payments" && chemin[1] === "webhook") return refuse();
+
+  const contentLength = Number(requete.headers.get("content-length") ?? "0");
+  if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
+    return Response.json(
+      {
+        statusCode: 413,
+        code: "PAYLOAD_TOO_LARGE",
+        message: "Requête trop volumineuse.",
+      },
+      { status: 413 },
+    );
+  }
+
+  let bodyBuffer: ArrayBuffer | undefined;
+  if (requete.method !== "GET" && requete.method !== "HEAD") {
+    bodyBuffer = await requete.arrayBuffer();
+    if (bodyBuffer.byteLength > MAX_BODY_BYTES) {
+      return Response.json(
+        {
+          statusCode: 413,
+          code: "PAYLOAD_TOO_LARGE",
+          message: "Requête trop volumineuse.",
+        },
+        { status: 413 },
+      );
+    }
+  }
 
   const adresse = new URL(requete.url);
   const cible = `${BASE_API}/${chemin.map(encodeURIComponent).join("/")}${adresse.search}`;
@@ -68,34 +98,50 @@ async function relaie(requete: Request, chemin: string[]) {
   if (typeContenu) entetes.set("Content-Type", typeContenu);
   const jetonSuivi = requete.headers.get("x-tracking-token");
   if (jetonSuivi) entetes.set("x-tracking-token", jetonSuivi);
+  const receiptSig = requete.headers.get("x-receipt-sig");
+  if (receiptSig) entetes.set("x-receipt-sig", receiptSig);
+  const receiptExp = requete.headers.get("x-receipt-exp");
+  if (receiptExp) entetes.set("x-receipt-exp", receiptExp);
+  const clientIp =
+    requete.headers.get("x-forwarded-for") ?? requete.headers.get("x-real-ip");
+  if (clientIp) entetes.set("x-forwarded-for", clientIp);
 
   let reponse: Response;
   try {
     reponse = await fetch(cible, {
       method: requete.method,
       headers: entetes,
-      body:
-        requete.method === "GET" || requete.method === "HEAD"
-          ? undefined
-          : await requete.arrayBuffer(),
+      body: bodyBuffer,
       cache: "no-store",
+      signal: AbortSignal.timeout(RELAY_TIMEOUT_MS),
     });
-  } catch {
+  } catch (err) {
+    const isTimeout =
+      err instanceof Error &&
+      (err.name === "TimeoutError" || err.name === "AbortError");
     return Response.json(
       {
-        statusCode: 502,
+        statusCode: isTimeout ? 504 : 502,
         code: "ERREUR",
-        message: "L'API est injoignable.",
+        message: isTimeout
+          ? "L'API met trop de temps à répondre."
+          : "L'API est injoignable.",
       },
-      { status: 502 },
+      { status: isTimeout ? 504 : 502 },
     );
   }
 
   const corps = await reponse.arrayBuffer();
-  const typeReponse = reponse.headers.get("content-type") ?? "application/json";
+  const resHeaders = new Headers();
+  resHeaders.set(
+    "content-type",
+    reponse.headers.get("content-type") ?? "application/json",
+  );
+  const disposition = reponse.headers.get("content-disposition");
+  if (disposition) resHeaders.set("content-disposition", disposition);
   return new Response(corps, {
     status: reponse.status,
-    headers: { "content-type": typeReponse },
+    headers: resHeaders,
   });
 }
 
@@ -106,13 +152,5 @@ export function GET(requete: Request, { params }: Params) {
 }
 
 export function POST(requete: Request, { params }: Params) {
-  return params.then((p) => relaie(requete, p.chemin));
-}
-
-export function PATCH(requete: Request, { params }: Params) {
-  return params.then((p) => relaie(requete, p.chemin));
-}
-
-export function DELETE(requete: Request, { params }: Params) {
   return params.then((p) => relaie(requete, p.chemin));
 }

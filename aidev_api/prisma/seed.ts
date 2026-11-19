@@ -13,6 +13,14 @@ if (!url)
 const prisma = new PrismaClient({ adapter: new PrismaPg(url) });
 
 async function main(): Promise<void> {
+  if (
+    process.env.NODE_ENV === 'production' &&
+    process.env.ALLOW_PROD_SEED !== 'true'
+  ) {
+    throw new Error(
+      'Execution du seed de demonstration interdite en production (definir ALLOW_PROD_SEED=true pour forcer).',
+    );
+  }
   const email = (process.env.SEED_ADMIN_EMAIL ?? 'admin@example.com')
     .trim()
     .toLowerCase();

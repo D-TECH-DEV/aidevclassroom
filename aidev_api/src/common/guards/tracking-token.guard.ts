@@ -30,14 +30,7 @@ export interface TrackedRequest {
 
 function extractToken(req: TrackedRequest): string | undefined {
   const h = req.headers?.['x-tracking-token'];
-  const header = Array.isArray(h) ? h[0] : h;
-  const q = req.query?.['trackingToken'];
-  const b = req.body?.['trackingToken'];
-  const raw =
-    header ??
-    (typeof q === 'string' ? q : undefined) ??
-    (typeof b === 'string' ? b : undefined);
-  return raw;
+  return Array.isArray(h) ? h[0] : h;
 }
 
 /** Garde les routes participant : exige le jeton de suivi (header x-tracking-token). */

@@ -66,6 +66,7 @@ export type Sprint = {
   status: StatutSprint;
   enrolledCount?: number;
   enrolledSeats?: number;
+  hasEnrollments?: boolean;
   createdAt?: string;
   updatedAt?: string;
 };

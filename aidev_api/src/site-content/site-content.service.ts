@@ -37,7 +37,7 @@ export type SiteContentPayload = {
 
 const DEFAULT_WHATSAPP_DISPLAY = '07 04 92 10 80';
 const DEFAULT_WHATSAPP_HREF = 'https://wa.me/2250704921080';
-const DEFAULT_CONTACT_EMAIL = 'contact@aidevclassroom.com';
+const DEFAULT_CONTACT_EMAIL = 'contact@ai-devclassroom.com';
 
 @Injectable()
 export class SiteContentService {

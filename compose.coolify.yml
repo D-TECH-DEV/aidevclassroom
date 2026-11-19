@@ -22,6 +22,32 @@ services:
       retries: 5
       start_period: 15s
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    command:
+      [
+        "redis-server",
+        "--appendonly",
+        "yes",
+        "--maxmemory",
+        "128mb",
+        "--maxmemory-policy",
+        "noeviction",
+        "--requirepass",
+        "${REDIS_PASSWORD}",
+      ]
+    volumes:
+      - aidev-redisdata-coolify:/data
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -q PONG"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   migrate:
     build:
       context: ./aidev_api
@@ -62,13 +88,21 @@ services:
       PAYSTACK_HTTP_TIMEOUT_MS: ${PAYSTACK_HTTP_TIMEOUT_MS:-15000}
       FRONTEND_URL: ${FRONTEND_URL}
       SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
+      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD}@redis:6379}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-AIDevClassroom <no-reply@ai-devclassroom.com>}
+      RECEIPT_SIGNING_SECRET: ${RECEIPT_SIGNING_SECRET:-}
+    volumes:
+      - aidev-uploads-coolify:/app/uploads
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/v1/health | grep -q '\"status\":\"ok\"' || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/v1/health | grep -q '\"status\":\"ok\"' || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -112,7 +146,7 @@ services:
       frontend:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost/healthz | grep -q 'healthy' || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/healthz | grep -q 'healthy' || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -120,3 +154,5 @@ services:
 
 volumes:
   aidev-pgdata-coolify:
+  aidev-redisdata-coolify:
+  aidev-uploads-coolify:

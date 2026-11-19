@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { ErreurApi } from "@/lib/api";
 import { ChampTelephone } from "@/components/inscription/ChampTelephone";
+import { ChoixPaiementPartiel } from "@/components/inscription/ChoixPaiementPartiel";
 import { normaliseTelephone } from "@/components/inscription/FormulaireInscription";
 import { useOuvrirInscription } from "@/components/inscription/ModaleInscription";
 import { CtaButton } from "@/components/ui/CtaButton";
@@ -12,15 +13,17 @@ import {
   type DossierAPayer,
 } from "@/components/inscription/ParcoursPaiement";
 import {
+  abandonnePaiement,
   adressePaiementValide,
+  demandeCodeRecuperation,
   dossiersLocaux,
   lancePaiement,
   ouvrePopupPaystack,
   rangeTrace,
-  retrouveDossiersParContact,
   SECOURS_WHATSAPP,
   statutInscription,
   traduitPaiement,
+  valideCodeRecuperation,
   verifiePaiement,
   type DossierLocal,
   type DossierSuivi,
@@ -89,7 +92,7 @@ export function ReprendrePaiement({ onFermer }: { onFermer?: () => void } = {}) 
   // ensemble, chacune porte son propre état.
   const [enCours, setEnCours] = useState<Record<number, boolean>>({});
   const [erreurs, setErreurs] = useState<Record<number, string>>({});
-  // Recherche par e-mail ou téléphone : pour un autre appareil ou un oubli d'e-mail.
+  // Recherche par e-mail ou téléphone avec validation OTP 6 chiffres.
   const [modeRecherche, setModeRecherche] = useState<"email" | "telephone">("email");
   const [email, setEmail] = useState("");
   const [indicatifTel, setIndicatifTel] = useState("+225");
@@ -97,11 +100,21 @@ export function ReprendrePaiement({ onFermer }: { onFermer?: () => void } = {}) 
   const [rechercheEmail, setRechercheEmail] = useState(false);
   const [erreurEmail, setErreurEmail] = useState<string | null>(null);
   const [retrouves, setRetrouves] = useState<number | null>(null);
+  const [etapeOtp, setEtapeOtp] = useState<"contact" | "code">("contact");
+  const [contactEnAttente, setContactEnAttente] = useState<{
+    email?: string;
+    phone?: string;
+  } | null>(null);
+  const [codeOtp, setCodeOtp] = useState("");
+  const [infoOtp, setInfoOtp] = useState<string | null>(null);
   // Le dossier dont on paie le reste en charge directe : le parcours à
   // étapes remplace alors la liste, avec retour ici (« Précédent »).
   const [chargeDossier, setChargeDossier] = useState<DossierAPayer | null>(
     null,
   );
+  const [dossierChoix, setDossierChoix] = useState<DossierAffiche | null>(null);
+  const [montantChoisi, setMontantChoisi] = useState<number>(0);
+  const [conditionsPartielles, setConditionsPartielles] = useState(false);
 
   // Relit les dossiers connus de ce navigateur et leur reste à payer.
   async function charge(): Promise<Etat> {
@@ -147,8 +160,7 @@ export function ReprendrePaiement({ onFermer }: { onFermer?: () => void } = {}) 
     };
   }, []);
 
-  // Un autre téléphone, un autre navigateur : l'e-mail retrouve les
-  // dossiers et range leurs jetons ici, qui devient capable de payer.
+  // Etape 1 : demande l'envoi d'un code OTP à 6 chiffres par e-mail.
   async function recupereParEmail(evenement: React.FormEvent) {
     evenement.preventDefault();
     if (rechercheEmail) return;
@@ -178,13 +190,46 @@ export function ReprendrePaiement({ onFermer }: { onFermer?: () => void } = {}) 
     setErreurEmail(null);
     setRetrouves(null);
     try {
-      const dossiers = await retrouveDossiersParContact(payload);
+      await demandeCodeRecuperation(payload);
+      setContactEnAttente(payload);
+      setCodeOtp("");
+      setInfoOtp(
+        "Si un dossier correspond à ces informations, un code à 6 chiffres vient d'être envoyé à l'adresse e-mail associée à ton inscription (valable 10 minutes).",
+      );
+      setEtapeOtp("code");
+    } catch (cause) {
+      setErreurEmail(traduitPaiement(cause));
+    } finally {
+      setRechercheEmail(false);
+    }
+  }
+
+  // Etape 2 : valide le code OTP et déverrouille les dossiers associés.
+  async function valideOtp(evenement: React.FormEvent) {
+    evenement.preventDefault();
+    if (rechercheEmail || !contactEnAttente) return;
+
+    const codePropre = codeOtp.trim();
+    if (!/^\d{6}$/.test(codePropre)) {
+      setErreurEmail("Saisis le code à 6 chiffres reçu par e-mail.");
+      return;
+    }
+
+    setRechercheEmail(true);
+    setErreurEmail(null);
+    try {
+      const dossiers = await valideCodeRecuperation(contactEnAttente, codePropre);
       setRetrouves(dossiers.length);
       if (dossiers.length === 0) {
         setErreurEmail(
           "Aucun dossier actif trouvé. Si ton inscription a été annulée, reprends une nouvelle inscription.",
         );
+        return;
       }
+      setEtapeOtp("contact");
+      setContactEnAttente(null);
+      setCodeOtp("");
+      setInfoOtp(null);
       setEtat(await charge());
     } catch (cause) {
       setErreurEmail(traduitPaiement(cause));
@@ -193,7 +238,41 @@ export function ReprendrePaiement({ onFermer }: { onFermer?: () => void } = {}) 
     }
   }
 
-  async function paieReste(dossier: DossierAffiche) {
+  async function renvoieCodeOtp() {
+    if (rechercheEmail || !contactEnAttente) return;
+    setRechercheEmail(true);
+    setErreurEmail(null);
+    try {
+      await demandeCodeRecuperation(contactEnAttente);
+      setCodeOtp("");
+      setInfoOtp(
+        "Si un dossier correspond à ces informations, un nouveau code à 6 chiffres a été envoyé (valable 10 minutes).",
+      );
+    } catch (cause) {
+      setErreurEmail(traduitPaiement(cause));
+    } finally {
+      setRechercheEmail(false);
+    }
+  }
+
+  function ouvreChoixMontant(dossier: DossierAffiche) {
+    const reste = dossier.suivi?.remainingAmountXof;
+    if (reste === undefined || reste <= 0) return;
+    setDossierChoix(dossier);
+    setMontantChoisi(reste);
+    setConditionsPartielles(false);
+    setErreurs((v) => {
+      const suivantes = { ...v };
+      delete suivantes[dossier.local.idInscription];
+      return suivantes;
+    });
+  }
+
+  async function paieReste(
+    dossier: DossierAffiche,
+    montantCustom?: number,
+    conditionsOk?: boolean,
+  ) {
     const reste = dossier.suivi?.remainingAmountXof;
     if (
       reste === undefined ||
@@ -202,6 +281,8 @@ export function ReprendrePaiement({ onFermer }: { onFermer?: () => void } = {}) 
     ) {
       return;
     }
+    const montantAPayer = Math.min(Math.max(montantCustom ?? reste, 1), reste);
+    const estPartiel = montantAPayer < reste;
 
     setEnCours((v) => ({ ...v, [dossier.local.idInscription]: true }));
     setErreurs((v) => {
@@ -213,8 +294,9 @@ export function ReprendrePaiement({ onFermer }: { onFermer?: () => void } = {}) 
     try {
       const lance = await lancePaiement(
         dossier.local.idInscription,
-        reste,
+        montantAPayer,
         dossier.local.jeton,
+        estPartiel ? conditionsOk : undefined,
       );
 
       if (!adressePaiementValide(lance.authorizationUrl)) {
@@ -227,7 +309,7 @@ export function ReprendrePaiement({ onFermer }: { onFermer?: () => void } = {}) 
         idInscription: dossier.local.idInscription,
         jeton: dossier.local.jeton,
         prenom: dossier.local.prenom ?? "",
-        montantXof: reste,
+        montantXof: montantAPayer,
         email: dossier.local.email,
       });
 
@@ -235,8 +317,15 @@ export function ReprendrePaiement({ onFermer }: { onFermer?: () => void } = {}) 
         onSuccess: (ref) => {
           const refFinale = ref || lance.reference;
           void verifiePaiement(refFinale, dossier.local.jeton)
-            .then(async () => {
+            .then(async (verifie) => {
               notifyInscriptionMaj();
+              if (verifie.status === "SUCCESS") {
+                window.location.assign(
+                  `/paiement/retour?reference=${encodeURIComponent(refFinale)}`,
+                );
+                return;
+              }
+              setDossierChoix(null);
               setEtat(await charge());
             })
             .catch((cause) => {
@@ -253,6 +342,7 @@ export function ReprendrePaiement({ onFermer }: { onFermer?: () => void } = {}) 
             });
         },
         onCancel: () => {
+          void abandonnePaiement(lance.reference, dossier.local.jeton);
           setEnCours((v) => ({
             ...v,
             [dossier.local.idInscription]: false,
@@ -288,6 +378,84 @@ export function ReprendrePaiement({ onFermer }: { onFermer?: () => void } = {}) 
   // étapes, mêmes messages, reprise d'une charge en cours incluse (le
   // parcours relit la dernière charge du dossier). « Précédent » revient
   // ici et rafraîchit les soldes.
+  if (dossierChoix && dossierChoix.suivi) {
+    const suivi = dossierChoix.suivi;
+    const reste = suivi.remainingAmountXof ?? 0;
+    const minimum = Math.min(suivi.sprint?.minimumPaymentXof ?? reste, reste);
+    const montantValide = Math.min(Math.max(montantChoisi, minimum), reste);
+    const estPartiel = minimum < reste && montantValide < reste;
+    const occupe = enCours[dossierChoix.local.idInscription] ?? false;
+    const erreurDossier = erreurs[dossierChoix.local.idInscription];
+
+    return (
+      <div className="flex flex-col gap-4 rounded-card border border-fg/15 bg-surface p-5 text-left">
+        <div>
+          <p className="font-mono text-xs uppercase tracking-[0.15em] text-fg/55">
+            {suivi.sprint?.name ?? `Dossier n°${suivi.id}`}
+          </p>
+          <p className="mt-1 text-h3 font-bold">
+            Reste à régler : {reste.toLocaleString("fr-FR")} FCFA
+          </p>
+        </div>
+
+        {minimum < reste ? (
+          <ChoixPaiementPartiel
+            minimumXof={minimum}
+            resteXof={reste}
+            montant={montantValide}
+            onChangeMontant={setMontantChoisi}
+            conditionsAcceptees={conditionsPartielles}
+            onChangeConditions={setConditionsPartielles}
+          />
+        ) : (
+          <p className="text-body text-fg/75">
+            Ce montant correspond au solde final de ton inscription.
+          </p>
+        )}
+
+        {erreurDossier ? (
+          <p role="alert" className="text-small font-medium text-fg">
+            {erreurDossier}
+          </p>
+        ) : null}
+
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
+          <button
+            type="button"
+            disabled={occupe}
+            onClick={() => setDossierChoix(null)}
+            className="shrink-0 rounded-pill border border-fg/20 px-6 py-3 font-mono text-small
+                       font-semibold text-fg/75 transition-colors
+                       hoverable:hover:border-fg/40 hoverable:hover:text-fg
+                       disabled:opacity-50"
+          >
+            Précédent
+          </button>
+          <div className="min-w-0 flex-1">
+            <CtaButton
+              type="button"
+              variante="vert"
+              taille="sm"
+              pleineLargeur
+              disabled={occupe || (estPartiel && !conditionsPartielles)}
+              onClick={() =>
+                void paieReste(
+                  dossierChoix,
+                  montantValide,
+                  estPartiel ? conditionsPartielles : undefined,
+                )
+              }
+            >
+              {occupe
+                ? "Ouverture du paiement…"
+                : `Payer — ${montantValide.toLocaleString("fr-FR")} FCFA`}
+            </CtaButton>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (chargeDossier) {
     return (
       <ParcoursPaiement
@@ -311,6 +479,103 @@ export function ReprendrePaiement({ onFermer }: { onFermer?: () => void } = {}) 
   }
 
   function BlocEmail({ titre, description }: { titre: string; description: string }) {
+    if (etapeOtp === "code") {
+      return (
+        <form
+          onSubmit={(e) => void valideOtp(e)}
+          className="rounded-card border border-fg/15 bg-surface
+                     px-[clamp(1.25rem,3vw,2rem)] py-[clamp(1.25rem,3svh,2rem)]
+                     text-left"
+        >
+          <p className="text-h3 font-bold leading-tight tracking-tight">
+            Vérification par code
+          </p>
+          {infoOtp ? (
+            <p className="mt-2 text-body text-fg/75">{infoOtp}</p>
+          ) : null}
+          <div className="mt-4 flex flex-col gap-3">
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]{6}"
+              maxLength={6}
+              autoComplete="one-time-code"
+              value={codeOtp}
+              onChange={(e) =>
+                setCodeOtp(e.target.value.replace(/\D/g, "").slice(0, 6))
+              }
+              placeholder="Code à 6 chiffres"
+              aria-label="Code de vérification à 6 chiffres"
+              className="w-full rounded-field border border-fg/20 bg-bg
+                         px-4 py-3 text-center font-mono text-h3 tracking-[0.25em]
+                         text-fg outline-none placeholder:text-body placeholder:tracking-normal
+                         placeholder:text-fg/35 focus-visible:border-accent/60"
+            />
+            <button
+              type="submit"
+              disabled={rechercheEmail}
+              className="inline-flex w-full shrink-0 items-center justify-center
+                         rounded-pill border-2 border-cta px-8 py-3
+                         text-body font-bold transition-transform
+                         duration-[120ms] active:scale-[0.96]
+                         disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {rechercheEmail ? "Vérification…" : "Valider le code"}
+            </button>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-small">
+            <button
+              type="button"
+              disabled={rechercheEmail}
+              onClick={() => void renvoieCodeOtp()}
+              className="text-fg/70 underline underline-offset-4 hoverable:hover:text-fg disabled:opacity-50"
+            >
+              Renvoyer un code
+            </button>
+            <button
+              type="button"
+              disabled={rechercheEmail}
+              onClick={() => {
+                setEtapeOtp("contact");
+                setCodeOtp("");
+                setErreurEmail(null);
+                setInfoOtp(null);
+              }}
+              className="text-fg/55 underline underline-offset-4 hoverable:hover:text-fg disabled:opacity-50"
+            >
+              Modifier l&apos;e-mail ou le numéro
+            </button>
+          </div>
+          {erreurEmail ? (
+            <div role="alert" className="mt-3 space-y-3">
+              <p className="text-small font-medium text-fg">{erreurEmail}</p>
+              {ouvreInscription ? (
+                <CtaButton
+                  type="button"
+                  variante="vert"
+                  taille="sm"
+                  pleineLargeur
+                  onClick={() => {
+                    onFermer?.();
+                    ouvreInscription();
+                  }}
+                >
+                  Reprendre mon inscription
+                </CtaButton>
+              ) : (
+                <CtaButton href="/" variante="vert" taille="sm" pleineLargeur>
+                  Reprendre mon inscription
+                </CtaButton>
+              )}
+            </div>
+          ) : null}
+          <p className="mt-4 text-xs text-fg/45">
+            Besoin d&apos;aide ? {SECOURS_WHATSAPP}
+          </p>
+        </form>
+      );
+    }
+
     return (
       <form
         onSubmit={(e) => void recupereParEmail(e)}
@@ -401,7 +666,7 @@ export function ReprendrePaiement({ onFermer }: { onFermer?: () => void } = {}) 
                        duration-[120ms] active:scale-[0.96]
                        disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {rechercheEmail ? "Recherche…" : "Retrouver mon dossier"}
+            {rechercheEmail ? "Envoi du code…" : "Recevoir un code de vérification"}
           </button>
         </div>
         {erreurEmail ? (
@@ -489,7 +754,7 @@ export function ReprendrePaiement({ onFermer }: { onFermer?: () => void } = {}) 
           dossier={dossier}
           occupe={enCours[dossier.local.idInscription] ?? false}
           erreur={erreurs[dossier.local.idInscription]}
-          onPaie={() => void paieReste(dossier)}
+          onPaie={() => ouvreChoixMontant(dossier)}
         />
       ))}
       <BlocEmail
@@ -601,7 +866,7 @@ function LigneDossier({
           >
             {occupe
               ? "Ouverture du paiement…"
-              : `Payer le reste — ${reste.toLocaleString("fr-FR")} FCFA`}
+              : "Compléter mon paiement"}
           </button>
           {erreur ? (
             <p role="alert" className="mt-3 text-small font-medium text-fg">

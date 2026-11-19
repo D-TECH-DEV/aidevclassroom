@@ -2,6 +2,7 @@ import "server-only";
 
 import { cache } from "react";
 import { cookies } from "next/headers";
+import { BASE_API } from "@/lib/api";
 
 /**
  * La session d'administration, dans un cookie que le navigateur ne peut
@@ -68,7 +69,7 @@ export function litDuree(expiresIn: unknown): number {
 /**
  * Le jeton de la session en cours, ou `null` si personne n'est connecté.
  *
- * ⚠️  `cache()` n'est pas là pour la performance, mais pour la correction.
+ * Attention : `cache()` n'est pas là pour la performance, mais pour la correction.
  *
  * Quand une action serveur écrit puis que Next re-rend la page dans la
  * même requête, `cookies()` est consulté deux fois : une fois dans le
@@ -109,14 +110,23 @@ export async function ouvreSession(jeton: string, expiresIn: unknown) {
 }
 
 /**
- * Ferme la session.
- *
- * L'API n'a pas de route de déconnexion et ne sait pas révoquer un jeton :
- * il reste techniquement valide jusqu'à son expiration. Effacer le cookie
- * est donc tout ce qu'on peut faire, et c'est aussi ce que la doc de
- * l'API recommande.
+ * Ferme la session côté serveur (révocation via POST /auth/logout) puis
+ * supprime le cookie d'administration.
  */
 export async function fermeSession() {
   const boite = await cookies();
+  const jeton = boite.get(NOM)?.value;
+  if (jeton && BASE_API) {
+    try {
+      await fetch(`${BASE_API}/auth/logout`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${jeton}` },
+        cache: "no-store",
+        signal: AbortSignal.timeout(5_000),
+      });
+    } catch {
+      // Meilleur effort : le cookie local est supprimé dans tous les cas.
+    }
+  }
   boite.delete({ name: NOM, path: CHEMIN });
 }

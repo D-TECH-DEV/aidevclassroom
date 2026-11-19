@@ -24,7 +24,9 @@ import {
   ChangeEnrollmentStatusDto,
   CreateEnrollmentDto,
   LookupByEmailDto,
+  VerifyRecoveryOtpDto,
 } from './dto/enrollment.dto';
+import { EnrollmentRecoveryService } from './enrollment-recovery.service';
 import { EnrollmentsService } from './enrollments.service';
 
 @ApiTags('enrollments')
@@ -32,6 +34,7 @@ import { EnrollmentsService } from './enrollments.service';
 export class EnrollmentsController {
   constructor(
     private readonly enrollments: EnrollmentsService,
+    private readonly recovery: EnrollmentRecoveryService,
     private readonly excel: ExportExcelService,
     private readonly pdf: ExportPdfService,
   ) {}
@@ -46,10 +49,16 @@ export class EnrollmentsController {
     });
   }
 
-  @Post('enrollments/by-email')
-  @Throttle({ default: { limit: 10, ttl: 60_000 } })
-  byEmail(@Body() dto: LookupByEmailDto) {
-    return this.enrollments.findByContact(dto.email, dto.phone);
+  @Post('enrollments/recovery/request')
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  requestRecovery(@Body() dto: LookupByEmailDto) {
+    return this.recovery.requestOtp(dto.email, dto.phone);
+  }
+
+  @Post('enrollments/recovery/verify')
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  verifyRecovery(@Body() dto: VerifyRecoveryOtpDto) {
+    return this.recovery.verifyOtp(dto.email, dto.phone, dto.code);
   }
 
   @Get('admin/enrollments')
@@ -65,7 +74,7 @@ export class EnrollmentsController {
   ) {
     return this.enrollments.listAdmin(
       page ? parseInt(page, 10) : 1,
-      limit ? parseInt(limit, 10) : 20,
+      limit ? parseInt(limit, 10) : 50,
       {
         sprintId: sprintId ? parseInt(sprintId, 10) : undefined,
         status,

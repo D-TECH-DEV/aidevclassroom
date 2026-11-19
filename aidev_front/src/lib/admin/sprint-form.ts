@@ -225,6 +225,14 @@ export function parseModificationSprint(
   patch.format = org.format;
   patch.level = org.level;
   patch.modules = org.modules;
+  patch.notifyParticipants = donnees.get("notifier") !== "non";
+  const noteNotification = String(donnees.get("noteNotification") ?? "").trim();
+  if (noteNotification) {
+    if (noteNotification.length > 500) {
+      return { erreur: "La note de notification ne doit pas dépasser 500 caractères." };
+    }
+    patch.notificationNote = noteNotification;
+  }
 
   return { id, patch };
 }

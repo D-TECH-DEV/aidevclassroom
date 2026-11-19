@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { remainingAmountXof, totalPaidXof } from '../payments/balance.util';
 
@@ -11,7 +12,8 @@ export class DashboardService {
     const [
       totalStudents,
       activeSprints,
-      enrollments,
+      totalEnrollments,
+      outstandingRows,
       collectedAgg,
       pendingAgg,
       recentEnrollments,
@@ -19,18 +21,21 @@ export class DashboardService {
     ] = await Promise.all([
       this.prisma.student.count(),
       this.prisma.sprint.count({ where: { status: 'ACTIVE' } }),
-      this.prisma.enrollment.findMany({
-        where: { status: { not: 'CANCELLED' } },
-        include: {
-          student: {
-            select: { id: true, firstName: true, lastName: true, email: true },
-          },
-          sprint: { select: { id: true, name: true, slug: true } },
-          payments: true,
-        },
-        orderBy: { createdAt: 'desc' },
-        take: 2000,
-      }),
+      this.prisma.enrollment.count({ where: { status: { not: 'CANCELLED' } } }),
+      this.prisma.$queryRaw<{ outstanding: bigint | number | string }[]>`
+        SELECT COALESCE(
+          SUM(GREATEST(0, e."total_amount_xof" - COALESCE(p.paid, 0))),
+          0
+        )::bigint AS outstanding
+        FROM "enrollments" e
+        LEFT JOIN (
+          SELECT "enrollment_id", SUM("amount_xof") AS paid
+          FROM "payments"
+          WHERE "status" = 'SUCCESS'
+          GROUP BY "enrollment_id"
+        ) p ON p."enrollment_id" = e."id"
+        WHERE e."status" <> 'CANCELLED'
+      `,
       this.prisma.payment.aggregate({
         _sum: { amountXof: true },
         _count: true,
@@ -69,17 +74,11 @@ export class DashboardService {
       }),
     ]);
 
-    let outstanding = 0;
-    for (const e of enrollments) {
-      const paid = e.payments
-        .filter((p) => p.status === 'SUCCESS')
-        .reduce((s, p) => s + p.amountXof, 0);
-      outstanding += Math.max(0, e.totalAmountXof - paid);
-    }
+    const outstanding = Number(outstandingRows[0]?.outstanding ?? 0);
     return {
       totalStudents,
       activeSprints,
-      totalEnrollments: enrollments.length,
+      totalEnrollments,
       totalCollectedXof: collectedAgg._sum.amountXof ?? 0,
       totalOutstandingXof: outstanding,
       pendingPayments: {
@@ -127,17 +126,31 @@ export class DashboardService {
   }
 
   async collections(from?: string, to?: string) {
+    const parsedFrom = from ? new Date(from) : null;
+    const parsedTo = to ? new Date(to) : null;
+    const validFrom =
+      parsedFrom && !Number.isNaN(parsedFrom.getTime()) ? parsedFrom : null;
+    const validTo =
+      parsedTo && !Number.isNaN(parsedTo.getTime()) ? parsedTo : null;
+
     const where = {
       status: 'SUCCESS' as const,
-      ...(from || to
+      ...(validFrom || validTo
         ? {
             paidAt: {
-              ...(from ? { gte: new Date(from) } : {}),
-              ...(to ? { lte: new Date(to) } : {}),
+              ...(validFrom ? { gte: validFrom } : {}),
+              ...(validTo ? { lte: validTo } : {}),
             },
           }
         : {}),
     };
+    const fromClause = validFrom
+      ? Prisma.sql`AND "paid_at" >= ${validFrom}`
+      : Prisma.empty;
+    const toClause = validTo
+      ? Prisma.sql`AND "paid_at" <= ${validTo}`
+      : Prisma.empty;
+
     const [agg, byDay] = await Promise.all([
       this.prisma.payment.aggregate({
         _sum: { amountXof: true },
@@ -148,6 +161,8 @@ export class DashboardService {
         SELECT TO_CHAR(DATE("paid_at"), 'YYYY-MM-DD') AS day, SUM("amount_xof")::int AS total, COUNT(*)::int AS count
         FROM "payments"
         WHERE "status" = 'SUCCESS'
+          ${fromClause}
+          ${toClause}
         GROUP BY DATE("paid_at")
         ORDER BY day DESC
         LIMIT 30
@@ -160,7 +175,7 @@ export class DashboardService {
     };
   }
 
-  async outstandingBalances(page = 1, limit = 20) {
+  async outstandingBalances(page = 1, limit = 50) {
     const take = Math.min(Math.max(limit, 1), 100);
     const skip = (Math.max(page, 1) - 1) * take;
     const enrollments = await this.prisma.enrollment.findMany({

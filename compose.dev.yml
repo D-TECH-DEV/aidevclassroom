@@ -15,7 +15,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev_password}
       POSTGRES_DB: ${POSTGRES_DB:-aidev_dev}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - aidev-pgdata-dev:/var/lib/postgresql/data
     networks:
@@ -32,6 +32,29 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  redis:
+    image: redis:7-alpine
+    container_name: aidev-redis-dev
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - aidev-redisdata-dev:/data
+    networks:
+      - aidev-dev-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   backend:
     build:
       context: ./aidev_api
@@ -40,8 +63,10 @@ services:
     restart: unless-stopped
     env_file:
       - ${ENV_FILE:-.env.dev}
+    environment:
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
     ports:
-      - "${BACKEND_PORT:-3001}:3000"
+      - "127.0.0.1:${BACKEND_PORT:-3001}:3000"
     volumes:
       - ./aidev_api:/app
       - /app/node_modules
@@ -50,6 +75,8 @@ services:
       - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - aidev-dev-net
@@ -77,7 +104,7 @@ services:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://backend:3000/api/v1}
       - NEXT_PUBLIC_PAYSTACK_CHARGE_ENABLED=${NEXT_PUBLIC_PAYSTACK_CHARGE_ENABLED:-1}
     ports:
-      - "${FRONTEND_PORT:-3000}:3000"
+      - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
     volumes:
       - ./aidev_front:/app
       - /app/node_modules
@@ -105,8 +132,8 @@ services:
     profiles: ["preprod"]
     restart: unless-stopped
     ports:
-      - "${HTTP_PORT:-8080}:80"
-      - "${HTTPS_PORT:-8443}:443"
+      - "127.0.0.1:${HTTP_PORT:-8080}:80"
+      - "127.0.0.1:${HTTPS_PORT:-8443}:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
@@ -118,7 +145,7 @@ services:
     networks:
       - aidev-dev-net
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost/healthz | grep -q 'healthy' || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/healthz | grep -q 'healthy' || exit 1"]
       interval: 20s
       timeout: 5s
       retries: 3
@@ -132,6 +159,8 @@ services:
 volumes:
   aidev-pgdata-dev:
     name: aidev-pgdata-dev
+  aidev-redisdata-dev:
+    name: aidev-redisdata-dev
 
 networks:
   aidev-dev-net:

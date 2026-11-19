@@ -1,6 +1,7 @@
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsInt,
@@ -158,9 +159,38 @@ export class UpdateSprintDto {
   @IsString({ each: true })
   @MaxLength(160, { each: true })
   modules?: string[] | null;
+
+  @IsOptional()
+  @IsBoolean()
+  notifyParticipants?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  notificationNote?: string;
 }
 
 export class ChangeSprintStatusDto {
   @IsEnum(SprintStatus)
   status!: SprintStatus;
+
+  @IsOptional()
+  @IsBoolean()
+  notifyParticipants?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  notificationNote?: string;
+}
+
+export class NotifySelectionDto {
+  @IsOptional()
+  @IsBoolean()
+  notifyParticipants?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  note?: string;
 }

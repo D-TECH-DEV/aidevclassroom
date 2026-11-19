@@ -44,13 +44,26 @@ export class AuthService {
 
   async login(email: string, password: string) {
     const user = await this.validateAdmin(email, password);
-    const payload = { sub: user.id, email: user.email, role: user.role };
+    const payload = {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+      tv: user.tokenVersion,
+    };
     const expiresIn =
       (this.config.get<string>('JWT_EXPIRES_IN') as string) ?? '1h';
     const accessToken = await this.jwt.signAsync(payload, {
       expiresIn,
     } as never);
     return { accessToken, expiresIn, admin: sanitizeAdmin(user) };
+  }
+
+  async logout(userId: number) {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { tokenVersion: { increment: 1 } },
+    });
+    return { loggedOut: true };
   }
 
   async me(userId: number) {
@@ -82,7 +95,7 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(next, 12);
     const updated = await this.prisma.user.update({
       where: { id: userId },
-      data: { passwordHash },
+      data: { passwordHash, tokenVersion: { increment: 1 } },
     });
     return sanitizeAdmin(updated);
   }

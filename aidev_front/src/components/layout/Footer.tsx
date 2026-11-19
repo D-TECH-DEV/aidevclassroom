@@ -25,7 +25,7 @@ export function Footer({ contactEmail }: { contactEmail?: string | null }) {
         <LogoMarque theme="dark" className="h-6 w-auto" />
 
         <p className="flex flex-wrap items-center justify-center gap-x-2">
-          <span>aidevclassroom.com · Yamoussoukro, Côte d&apos;Ivoire</span>
+          <span>ai-devclassroom.com · Yamoussoukro, Côte d&apos;Ivoire</span>
           {contactEmail ? (
             <>
               <span aria-hidden="true">·</span>

@@ -122,6 +122,10 @@ export function formatXof(value: number): string {
   return `${new Intl.NumberFormat('fr-FR').format(Math.round(value))} FCFA`;
 }
 
+export function sanitizeSpreadsheetCell(value: string): string {
+  return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+}
+
 export function mapEnrollmentRow(r: EnrollmentExportRow) {
   return {
     id: r.id,

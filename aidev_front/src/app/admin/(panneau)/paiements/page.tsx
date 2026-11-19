@@ -100,7 +100,7 @@ async function Contenu({ searchParams }: Params) {
       sprints({ limit: 100 }),
     ]);
   } catch (cause) {
-    if (sessionPerdue(cause)) redirect("/admin/connexion");
+    if (sessionPerdue(cause)) redirect("/admin/connexion?expiree=1");
     return (
       <div className="mt-6">
         <Alerte>{traduitAdmin(cause)}</Alerte>

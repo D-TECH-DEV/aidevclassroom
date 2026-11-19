@@ -71,6 +71,9 @@ export class EnrollmentsService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
+        if (typeof tx.$queryRaw === 'function') {
+          await tx.$queryRaw`SELECT "id" FROM "sprints" WHERE "id" = ${sprintId} FOR UPDATE`;
+        }
         if (sprint.capacity != null) {
           const rows = await tx.enrollment.findMany({
             where: { sprintId, status: { in: ['CONFIRMED', 'COMPLETED'] } },
@@ -187,7 +190,7 @@ export class EnrollmentsService {
     return { dossiers };
   }
 
-  async listAdmin(page = 1, limit = 20, filters: AdminEnrollmentFilters = {}) {
+  async listAdmin(page = 1, limit = 50, filters: AdminEnrollmentFilters = {}) {
     const take = Math.min(Math.max(limit, 1), 100);
     const skip = (Math.max(page, 1) - 1) * take;
     const where = buildAdminEnrollmentWhere(filters);

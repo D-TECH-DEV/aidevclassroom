@@ -65,7 +65,7 @@ async function Contenu() {
   } catch (cause) {
     // Jeton expiré pendant la navigation : on repart proprement à la
     // connexion plutôt que d'afficher une erreur qu'on sait résoudre.
-    if (sessionPerdue(cause)) redirect("/admin/connexion");
+    if (sessionPerdue(cause)) redirect("/admin/connexion?expiree=1");
     return (
       <>
         <Surtitre>Vue d&apos;ensemble</Surtitre>
@@ -100,7 +100,11 @@ async function Contenu() {
         <Tuile
           libelle="Encaissé"
           valeur={montant(donnees.totalCollectedXof)}
-          precision="paiements réussis uniquement"
+          precision={
+            <span className="text-fg">
+              sur {montant(donnees.totalCollectedXof + donnees.totalOutstandingXof)}
+            </span>
+          }
           icone={<HugeiconsIcon icon={Wallet01Icon} size={16} />}
           accent
         />

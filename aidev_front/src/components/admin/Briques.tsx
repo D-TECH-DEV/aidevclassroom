@@ -159,7 +159,7 @@ export function Tuile({
 }: {
   libelle: string;
   valeur: string;
-  precision?: string;
+  precision?: React.ReactNode;
   icone?: React.ReactNode;
   accent?: boolean;
 }) {

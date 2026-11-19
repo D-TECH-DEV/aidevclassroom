@@ -18,6 +18,7 @@ import {
 import type { Sprint } from "@/lib/admin/types";
 import { Alerte } from "./Briques";
 import { EtapeIdentite, EtapeTarifs } from "./ModaleSprintEtapes";
+import { emettreToastNotificationMail } from "./ToastNotificationMail";
 import {
   BarreEtapesModale,
   EtapeProgramme,
@@ -87,6 +88,8 @@ export function ModaleSprint({
   const [niveau, setNiveau] = useState(sprint?.level ?? "");
   const [modules, setModules] = useState((sprint?.modules ?? []).join("\n"));
   const [lancer, setLancer] = useState(false);
+  const [notifier, setNotifier] = useState(true);
+  const [noteNotification, setNoteNotification] = useState("");
 
   useEffect(() => {
     const dlg = dialogRef.current;
@@ -97,10 +100,12 @@ export function ModaleSprint({
 
   useEffect(() => {
     if (etat.succes && ouvert) {
+      emettreToastNotificationMail(etat.notification);
+      dialogRef.current?.close();
       onFermer();
       router.refresh();
     }
-  }, [etat.succes, ouvert, onFermer, router]);
+  }, [etat.succes, etat.notification, ouvert, onFermer, router]);
 
   function check1() {
     const err = valideEtape1Sprint({ edition, nom, slug, debut, fin, capacite });
@@ -154,6 +159,8 @@ export function ModaleSprint({
     ["lieu", lieu],
     ["niveau", niveau],
     ["modules", modules],
+    ["notifier", notifier ? "oui" : "non"],
+    ["noteNotification", noteNotification],
   ];
 
   return (
@@ -233,6 +240,8 @@ export function ModaleSprint({
                 niveau={niveau} setNiveau={setNiveau}
                 modules={modules} setModules={setModules}
                 lancer={lancer} setLancer={setLancer}
+                notifier={notifier} setNotifier={setNotifier}
+                noteNotification={noteNotification} setNoteNotification={setNoteNotification}
               />
             ) : null}
             {erreurEtape ? <div className="mt-4"><Alerte>{erreurEtape}</Alerte></div> : null}

@@ -30,6 +30,48 @@ services:
         max-size: "10m"
         max-file: "5"
 
+  redis:
+    image: redis:7-alpine
+    container_name: aidev-redis-prod
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    command:
+      [
+        "redis-server",
+        "--appendonly",
+        "yes",
+        "--maxmemory",
+        "128mb",
+        "--maxmemory-policy",
+        "noeviction",
+        "--requirepass",
+        "${REDIS_PASSWORD}",
+      ]
+    volumes:
+      - aidev-redisdata-prod:/data
+    networks:
+      - aidev-prod-net
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -q PONG"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+        reservations:
+          cpus: "0.10"
+          memory: 64M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   backend:
     build:
       context: ./aidev_api
@@ -39,15 +81,21 @@ services:
     restart: unless-stopped
     env_file:
       - ${ENV_FILE:-.env.prod}
+    environment:
+      - REDIS_URL=${REDIS_URL:-redis://:${REDIS_PASSWORD}@redis:6379}
+    volumes:
+      - aidev-uploads-prod:/app/uploads
     expose:
       - "3000"
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - aidev-prod-net
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/v1/health | grep -q '\"status\":\"ok\"' || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/v1/health | grep -q '\"status\":\"ok\"' || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -128,7 +176,7 @@ services:
     networks:
       - aidev-prod-net
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost/healthz | grep -q 'healthy' || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/healthz | grep -q 'healthy' || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -150,6 +198,10 @@ services:
 volumes:
   aidev-pgdata-prod:
     name: aidev-pgdata-prod
+  aidev-redisdata-prod:
+    name: aidev-redisdata-prod
+  aidev-uploads-prod:
+    name: aidev-uploads-prod
   certbot-etc:
     name: aidev-certbot-etc
   certbot-var:

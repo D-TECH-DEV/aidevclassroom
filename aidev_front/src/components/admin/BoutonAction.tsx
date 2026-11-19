@@ -18,6 +18,7 @@ import {
   type StatutSprint,
 } from "@/lib/admin/types";
 import { ModaleConfirmation } from "./ModaleConfirmation";
+import { emettreToastNotificationMail } from "./ToastNotificationMail";
 
 /**
  * Les deux boutons qui écrivent quelque chose.
@@ -98,19 +99,48 @@ export function GroupeStatutsSprint({
   const [enCours, demarrer] = useTransition();
   const [cibleEnCours, setCibleEnCours] = useState<StatutSprint | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
+  const [cibleConfirm, setCibleConfirm] = useState<
+    "DRAFT" | "INACTIVE" | "ACTIVE" | null
+  >(null);
+  const [notifier, setNotifier] = useState(true);
+  const [noteNotification, setNoteNotification] = useState("");
 
-  function basculer(vers: StatutSprint) {
-    if (vers === statutActuel || enCours) return;
+  function executerChangement(
+    vers: StatutSprint,
+    opts?: { notifier: boolean; note: string },
+  ) {
     setErreur(null);
     setCibleEnCours(vers);
     demarrer(async () => {
       const fd = new FormData();
       fd.set("id", String(id));
       fd.set("statut", vers);
+      if (opts) {
+        fd.set("notifier", opts.notifier ? "oui" : "non");
+        if (opts.note.trim()) fd.set("noteNotification", opts.note.trim());
+      }
       const res = await changerStatutSprint(INITIAL, fd);
       if (res.erreur) setErreur(res.erreur);
+      else emettreToastNotificationMail(res.notification);
       setCibleEnCours(null);
+      setCibleConfirm(null);
     });
+  }
+
+  function basculer(vers: StatutSprint) {
+    if (vers === statutActuel || enCours) return;
+    const versSuspension =
+      statutActuel === "ACTIVE" && (vers === "DRAFT" || vers === "INACTIVE");
+    const versActivation =
+      (statutActuel === "DRAFT" || statutActuel === "INACTIVE") &&
+      vers === "ACTIVE";
+    if (versSuspension || versActivation) {
+      setNotifier(true);
+      setNoteNotification("");
+      setCibleConfirm(vers);
+      return;
+    }
+    executerChangement(vers);
   }
 
   return (
@@ -145,6 +175,84 @@ export function GroupeStatutsSprint({
         <span role="alert" className="font-mono text-small text-fg/75">
           {erreur}
         </span>
+      ) : null}
+
+      {cibleConfirm ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-bg/80 p-4 backdrop-blur-sm"
+          onClick={() => !enCours && setCibleConfirm(null)}
+        >
+          <div
+            className="flex w-[min(94vw,30rem)] flex-col gap-4 rounded-card border border-fg/20 bg-surface p-5 text-fg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div>
+              <p className="font-mono text-small uppercase tracking-[0.18em] text-accent">
+                Changement de statut
+              </p>
+              <h3 className="mt-1 text-h3 font-bold text-fg">
+                Passer en « {LIBELLE_SPRINT[cibleConfirm]} »
+              </h3>
+              <p className="mt-1 text-small text-fg/70">
+                {cibleConfirm === "ACTIVE"
+                  ? "La session sera ouverte sur le site public."
+                  : "La session ne sera plus ouverte aux inscriptions."}
+              </p>
+            </div>
+
+            <label className="flex items-start gap-3 rounded-field border border-accent/30 bg-bg/60 px-3.5 py-2.5">
+              <input
+                type="checkbox"
+                checked={notifier}
+                onChange={(e) => setNotifier(e.target.checked)}
+                className="mt-0.5 size-4 accent-[#2ee66b]"
+              />
+              <span className="text-small text-fg/85">
+                Notifier par e-mail les inscrits ayant déjà versé un acompte
+              </span>
+            </label>
+
+            {notifier ? (
+              <label className="flex flex-col gap-1">
+                <span className="font-mono text-small text-fg/65">
+                  Motif ou message complémentaire (optionnel)
+                </span>
+                <input
+                  type="text"
+                  maxLength={500}
+                  value={noteNotification}
+                  onChange={(e) => setNoteNotification(e.target.value)}
+                  placeholder="Ex. Session reportée à une date ultérieure."
+                  className="rounded-field border border-fg/20 bg-bg px-3 py-2 text-small text-fg outline-none focus:border-accent"
+                />
+              </label>
+            ) : null}
+
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={enCours}
+                onClick={() => setCibleConfirm(null)}
+                className="rounded-field border border-fg/20 px-4 py-1.5 font-mono text-small text-fg/75 hover:border-fg/40 hover:text-fg disabled:opacity-50"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                disabled={enCours}
+                onClick={() =>
+                  executerChangement(cibleConfirm, {
+                    notifier,
+                    note: noteNotification,
+                  })
+                }
+                className="rounded-field bg-accent px-4 py-1.5 font-bold text-small text-bg hover:opacity-90 disabled:opacity-50"
+              >
+                {enCours ? "Traitement…" : "Confirmer"}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );

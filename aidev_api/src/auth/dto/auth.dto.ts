@@ -15,22 +15,13 @@ export class LoginDto {
   password!: string;
 }
 
-export class RegisterDto {
-  @IsEmail({}, { message: 'E-mail invalide?' })
-  email!: string;
-
-  @IsString()
-  @IsNotEmpty({ message: 'Mot de passe requis.' })
-  password!: string;
-}
-
 export class ChangePasswordDto {
   @IsString()
   @IsNotEmpty()
   currentPassword!: string;
 
   @IsString()
-  @MinLength(8, { message: '8 caracteres minimum.' })
+  @MinLength(12, { message: '12 caracteres minimum.' })
   @MaxLength(128)
   newPassword!: string;
 }

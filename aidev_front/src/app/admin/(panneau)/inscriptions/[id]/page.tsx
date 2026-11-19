@@ -67,7 +67,7 @@ async function Contenu({ params }: Params) {
   try {
     fiche = await inscription(id);
   } catch (cause) {
-    if (sessionPerdue(cause)) redirect("/admin/connexion");
+    if (sessionPerdue(cause)) redirect("/admin/connexion?expiree=1");
     if (cause instanceof ErreurApi && cause.statusCode === 404) {
       return <Introuvable />;
     }

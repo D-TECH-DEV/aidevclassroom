@@ -28,6 +28,15 @@ export class AuthController {
     return this.auth.login(dto.email, dto.password);
   }
 
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @ApiBearerAuth('jwt')
+  logout(@CurrentUser() user: { id: number }) {
+    return this.auth.logout(user.id);
+  }
+
 
   @Get('me')
   @UseGuards(JwtAuthGuard, RolesGuard)

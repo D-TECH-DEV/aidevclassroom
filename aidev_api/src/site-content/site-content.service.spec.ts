@@ -72,7 +72,7 @@ describe('SiteContentService', () => {
     await expect(svc.getPublicContent()).resolves.toEqual({
       whatsappDisplay: '07 04 92 10 80',
       whatsappHref: 'https://wa.me/2250704921080',
-      contactEmail: 'contact@aidevclassroom.com',
+      contactEmail: 'contact@ai-devclassroom.com',
       trainers: [],
       faqs: [],
     });

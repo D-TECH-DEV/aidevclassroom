@@ -53,7 +53,7 @@ export function BoutonModifierSprint({ sprint }: { sprint: Sprint }) {
 
       {ouvert ? (
         <ModaleSprint
-          key={`edition-${sprint.id}-${sprint.updatedAt ?? ""}`}
+          key={`edition-${sprint.id}`}
           ouvert={ouvert}
           sprint={sprint}
           onFermer={() => setOuvert(false)}

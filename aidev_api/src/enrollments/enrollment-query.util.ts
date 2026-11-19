@@ -35,18 +35,26 @@ export const ADMIN_ENROLLMENT_INCLUDE = {
 export function buildAdminEnrollmentWhere(
   filters: AdminEnrollmentFilters,
 ): Prisma.EnrollmentWhereInput {
+  const tokens = (filters.search ?? '')
+    .trim()
+    .split(/\s+/)
+    .filter((t) => t.length > 0);
+
   return {
     ...(filters.sprintId ? { sprintId: filters.sprintId } : {}),
     ...(filters.status ? { status: filters.status } : {}),
-    ...(filters.search
+    ...(tokens.length > 0
       ? {
-          student: {
-            OR: [
-              { firstName: { contains: filters.search } },
-              { lastName: { contains: filters.search } },
-              { email: { contains: filters.search } },
-            ],
-          },
+          AND: tokens.map((token) => ({
+            student: {
+              OR: [
+                { firstName: { contains: token, mode: 'insensitive' } },
+                { lastName: { contains: token, mode: 'insensitive' } },
+                { email: { contains: token, mode: 'insensitive' } },
+                { phone: { contains: token, mode: 'insensitive' } },
+              ],
+            },
+          })),
         }
       : {}),
   };
