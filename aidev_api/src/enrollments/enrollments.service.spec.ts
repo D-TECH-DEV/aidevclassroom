@@ -307,4 +307,89 @@ describe('EnrollmentsService (RG01/RG04/RG13/RG14)', () => {
       response: expect.objectContaining({ code: 'ENROLLMENT_NOT_SETTLED' }),
     });
   });
+
+  it('annulation avec paiement : envoie un e-mail mentionnant le montant deja verse', async () => {
+    const prisma = {
+      enrollment: {
+        findUnique: jest.fn(async () => ({
+          id: 42,
+          status: 'CONFIRMED',
+          totalAmountXof: 50000,
+          payments: [
+            { status: 'SUCCESS', amountXof: 15000 },
+            { status: 'PENDING', amountXof: 35000 },
+          ],
+          student: {
+            firstName: 'Awa',
+            lastName: 'Kone',
+            email: 'awa@example.com',
+          },
+          sprint: { name: 'Sprint #1' },
+        })),
+      },
+      $transaction: jest.fn(async (cb: (tx: unknown) => Promise<unknown>) =>
+        cb({
+          payment: { updateMany: jest.fn(async () => ({ count: 1 })) },
+          enrollment: {
+            update: jest.fn(async () => ({ id: 42, status: 'CANCELLED' })),
+          },
+        }),
+      ),
+    };
+    const mail = {
+      sendEnrollmentCancelledEmail: jest.fn(async () => true),
+    };
+    const svc = new EnrollmentsService(prisma as never, mail as never);
+    const res = await svc.changeStatus(42, 'CANCELLED');
+    expect(res).toMatchObject({ id: 42, status: 'CANCELLED' });
+    expect(mail.sendEnrollmentCancelledEmail).toHaveBeenCalledWith({
+      to: 'awa@example.com',
+      studentName: 'Awa Kone',
+      sprintName: 'Sprint #1',
+      enrollmentId: 42,
+      paidXof: 15000,
+      totalAmountXof: 50000,
+    });
+  });
+
+  it('annulation sans paiement : envoie un e-mail avec paidXof a 0', async () => {
+    const prisma = {
+      enrollment: {
+        findUnique: jest.fn(async () => ({
+          id: 43,
+          status: 'PENDING',
+          totalAmountXof: 50000,
+          payments: [],
+          student: {
+            firstName: 'Koffi',
+            lastName: 'Yao',
+            email: 'koffi@example.com',
+          },
+          sprint: { name: 'Sprint #1' },
+        })),
+      },
+      $transaction: jest.fn(async (cb: (tx: unknown) => Promise<unknown>) =>
+        cb({
+          payment: { updateMany: jest.fn(async () => ({ count: 0 })) },
+          enrollment: {
+            update: jest.fn(async () => ({ id: 43, status: 'CANCELLED' })),
+          },
+        }),
+      ),
+    };
+    const mail = {
+      sendEnrollmentCancelledEmail: jest.fn(async () => true),
+    };
+    const svc = new EnrollmentsService(prisma as never, mail as never);
+    const res = await svc.changeStatus(43, 'CANCELLED');
+    expect(res).toMatchObject({ id: 43, status: 'CANCELLED' });
+    expect(mail.sendEnrollmentCancelledEmail).toHaveBeenCalledWith({
+      to: 'koffi@example.com',
+      studentName: 'Koffi Yao',
+      sprintName: 'Sprint #1',
+      enrollmentId: 43,
+      paidXof: 0,
+      totalAmountXof: 50000,
+    });
+  });
 });

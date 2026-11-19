@@ -15,9 +15,9 @@ export async function GET(): Promise<NextResponse> {
   const edition = sprints.find((s) => s.statut === "ACTIVE") ?? null;
 
   const lignes: string[] = [
-    "# AIDevClassroom",
+    "# AIDevClassroom (Aidev Yakro / AIDev Yamoussoukro)",
     "",
-    "> Programme de formation intensive par sprints présentiels en Côte d'Ivoire (Yamoussoukro) pour apprendre à concevoir, développer, sécuriser et déployer des applications web réelles en guidant l'intelligence artificielle avec une méthodologie d'ingénierie logicielle stricte.",
+    "> Programme de formation intensive par sprints présentiels à Yamoussoukro (Yakro, Côte d'Ivoire) pour apprendre à concevoir, développer, sécuriser et déployer des applications web réelles en guidant l'intelligence artificielle avec une méthodologie d'ingénierie logicielle stricte.",
     "",
     `- Site officiel : ${baseUrl}`,
     `- Contact WhatsApp : ${contenu.whatsappDisplay} (${contenu.whatsappHref})`,

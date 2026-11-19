@@ -9,15 +9,19 @@ export interface SprintNotificationChange {
   newValue: string;
 }
 
+export type PriceChangeDirection = 'increase' | 'decrease' | 'mixed';
+
 export interface SprintNotificationEmailParams {
   to: string;
   studentName: string;
   sprintName: string;
   kind:
     | 'SCHEDULE_OR_LOCATION_UPDATED'
+    | 'PRICE_UPDATED'
     | 'POSTPONED_OR_SUSPENDED'
     | 'SESSION_REACTIVATED';
   changes?: SprintNotificationChange[];
+  priceDirection?: PriceChangeDirection;
   newStatus?: 'DRAFT' | 'INACTIVE';
   note?: string;
   startAt?: Date;
@@ -202,11 +206,18 @@ export class MailService {
   ): { subject: string; html: string } {
     const estReport = params.kind === 'POSTPONED_OR_SUSPENDED';
     const estReouverture = params.kind === 'SESSION_REACTIVATED';
+    const estPrix = params.kind === 'PRICE_UPDATED';
+    const directionPrix = params.priceDirection ?? 'mixed';
+
     const sujet = estReport
       ? `Information importante : report ou suspension — ${params.sprintName}`
       : estReouverture
         ? `Bonne nouvelle : session ouverte — ${params.sprintName}`
-        : `Mise a jour de votre session — ${params.sprintName}`;
+        : estPrix
+          ? directionPrix === 'increase'
+            ? `Information tarifaire (votre tarif reste garanti) — ${params.sprintName}`
+            : `Ajustement tarifaire — ${params.sprintName}`
+          : `Mise a jour de votre session — ${params.sprintName}`;
 
     const titre = estReport
       ? params.newStatus === 'INACTIVE'
@@ -214,7 +225,27 @@ export class MailService {
         : 'Session reportée (mise en attente)'
       : estReouverture
         ? 'Votre session est ouverte'
-        : 'Mise à jour des informations de formation';
+        : estPrix
+          ? directionPrix === 'increase'
+            ? 'Votre tarif reste intégralement garanti'
+            : 'Ajustement tarifaire de la session'
+          : 'Mise à jour des informations de formation';
+
+    const introPrixHtml =
+      directionPrix === 'increase'
+        ? `Le tarif public des nouvelles inscriptions pour la session <strong>${this.escapeHtml(params.sprintName)}</strong> vient d'être révisé à la hausse.<br/><br/>
+           <span style="display:block; padding:12px 14px; background:#ECFDF5; border-left:3px solid #10B981; border-radius:4px; color:#065F46; font-size:14px;">
+             <strong>Rassurez-vous : votre inscription étant déjà enregistrée, votre tarif initial reste 100 % garanti et inchangé.</strong> Aucun supplément ne vous sera demandé.
+           </span>`
+        : directionPrix === 'decrease'
+          ? `Afin de faciliter l'accès aux dernières places de la session <strong>${this.escapeHtml(params.sprintName)}</strong>, nous avons procédé à un ajustement à la baisse du tarif public des nouvelles inscriptions.<br/><br/>
+             <span style="display:block; padding:12px 14px; background:#EFF6FF; border-left:3px solid #2563EB; border-radius:4px; color:#1E3A8A; font-size:14px;">
+               Votre place reste pleinement réservée avec l'ensemble des avantages et du suivi prévus. Si vous avez la moindre question concernant votre dossier ou votre solde, n'hésitez pas à répondre à cet e-mail ou à nous écrire sur WhatsApp : notre équipe est à votre écoute.
+             </span>`
+          : `Les conditions tarifaires des nouvelles inscriptions pour la session <strong>${this.escapeHtml(params.sprintName)}</strong> ont été ajustées.<br/><br/>
+             <span style="display:block; padding:12px 14px; background:#F8FAFC; border-left:3px solid #10B981; border-radius:4px; color:#1E293B; font-size:14px;">
+               Votre place et votre suivi restent pleinement garantis. Pour toute question concernant votre dossier, notre équipe reste disponible par retour d'e-mail ou sur WhatsApp.
+             </span>`;
 
     const changesRows = (params.changes ?? [])
       .map(
@@ -251,7 +282,9 @@ export class MailService {
         ? 'Information importante'
         : estReouverture
           ? 'Session ouverte'
-          : 'Mise à jour de session',
+          : estPrix
+            ? 'Information tarifaire'
+            : 'Mise à jour de session',
       badgeBg: estReport ? '#FEF3C7' : estReouverture ? '#ECFDF5' : '#EFF6FF',
       badgeColor: estReport ? '#92400E' : estReouverture ? '#065F46' : '#1E40AF',
       title: titre,
@@ -263,7 +296,9 @@ export class MailService {
               ? `Nous vous informons que la session <strong>${this.escapeHtml(params.sprintName)}</strong> est actuellement reportée. Votre inscription et les versements déjà effectués restent intégralement conservés.`
               : estReouverture
                 ? `Nous avons le plaisir de vous informer que la session <strong>${this.escapeHtml(params.sprintName)}</strong> est désormais ouverte. Retrouvez ci-dessous les informations pratiques de votre formation.`
-                : `Des informations pratiques concernant votre session <strong>${this.escapeHtml(params.sprintName)}</strong> ont été mises à jour.`
+                : estPrix
+                  ? introPrixHtml
+                  : `Des informations pratiques concernant votre session <strong>${this.escapeHtml(params.sprintName)}</strong> ont été mises à jour.`
           }
         </p>
         ${noteBloc}
@@ -479,6 +514,66 @@ export class MailService {
       );
       return false;
     }
+  }
+
+  async sendEnrollmentCancelledEmail(params: {
+    to: string;
+    studentName: string;
+    sprintName: string;
+    enrollmentId: number;
+    paidXof: number;
+    totalAmountXof: number;
+  }): Promise<boolean> {
+    if (!this.apiKey) {
+      this.logger.warn(
+        `RESEND_API_KEY absente : e-mail d'annulation dossier #${params.enrollmentId} ignore.`,
+      );
+      return false;
+    }
+
+    const aPaye = params.paidXof > 0;
+    const paidFmt = formatXof(params.paidXof);
+    const totalFmt = formatXof(params.totalAmountXof);
+    const subject = aPaye
+      ? `Annulation de votre dossier #${params.enrollmentId} (versement trace) — ${params.sprintName}`
+      : `Annulation de votre dossier #${params.enrollmentId} — ${params.sprintName}`;
+
+    const blocStatutPaiement = aPaye
+      ? `<div style="margin:18px 0; padding:14px 16px; background:#EFF6FF; border-left:3px solid #2563EB; border-radius:6px; color:#1E3A8A; font-size:14px; line-height:1.6;">
+           <strong>Versement déjà effectué : ${this.escapeHtml(paidFmt)}</strong> (sur un total initial de ${this.escapeHtml(totalFmt)}).<br/><br/>
+           Ce règlement reste intégralement tracé dans notre historique. Lors de votre <strong>prochaine inscription</strong>, il vous suffira de contacter notre équipe (par retour d'e-mail ou sur WhatsApp) avec la référence <strong>#${params.enrollmentId}</strong> afin que nous fassions la différence avec ce montant déjà versé (ou pour organiser un remboursement si vous le souhaitez).
+         </div>`
+      : `<div style="margin:18px 0; padding:14px 16px; background:#F8FAFC; border-left:3px solid #64748B; border-radius:6px; color:#334155; font-size:14px; line-height:1.6;">
+           <strong>Aucun paiement n'avait été enregistré</strong> sur ce dossier.<br/><br/>
+           Si vous souhaitez rejoindre cette session ou une prochaine édition, vous pourrez effectuer une nouvelle inscription directement sur notre site à tout moment, sans aucune formalité particulière.
+         </div>`;
+
+    const html = this.wrapEmailLayout({
+      badgeText: aPaye ? 'Dossier annulé · Paiement tracé' : 'Dossier annulé',
+      badgeBg: aPaye ? '#EFF6FF' : '#FEF3C7',
+      badgeColor: aPaye ? '#1E40AF' : '#92400E',
+      title: `Annulation de votre inscription (#${params.enrollmentId})`,
+      bodyHtml: `
+        <p style="margin:0 0 16px; color:#334155; font-size:15px; line-height:1.6;">
+          Bonjour <strong style="color:#0F172A;">${this.escapeHtml(params.studentName)}</strong>,<br/>
+          Nous vous confirmons que votre dossier d'inscription <strong>#${params.enrollmentId}</strong> pour la session <strong>${this.escapeHtml(params.sprintName)}</strong> a été annulé.
+        </p>
+        ${blocStatutPaiement}
+        <p style="margin:20px 0 8px;">
+          <a href="https://ai-devclassroom.com" style="display:inline-block; background:#010F06; color:#2EE66B; text-decoration:none; font-weight:bold; font-size:13px; padding:11px 20px; border-radius:8px;">Visiter ai-devclassroom.com</a>
+        </p>
+      `,
+    });
+
+    return this.postResendEmail(
+      {
+        from: this.fromEmail,
+        to: [params.to],
+        subject,
+        html,
+      },
+      `cancel:${params.enrollmentId}`,
+    );
   }
 
   private wrapEmailLayout(opts: {

@@ -141,62 +141,63 @@ export function ModaleInscription({
           className="fixed inset-0 z-50 flex items-center justify-center bg-bg/80 p-4 backdrop-blur-sm"
         >
           <div
-            className="w-full max-w-[34rem]
-                       max-h-[min(90svh,48rem)] overflow-y-auto
+            className="flex w-full max-w-[38rem] flex-col
+                       max-h-[min(90svh,52rem)] overflow-hidden
                        rounded-card border border-fg/15 bg-bg text-fg shadow-2xl"
           >
-          <div className="p-[clamp(1.25rem,4vw,2.25rem)]">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="font-mono text-small text-accent">
-                  <span aria-hidden className="select-none">
-                    {"// "}
-                  </span>
-                  inscription
-                </p>
-                <h2
-                  id="titre-inscription"
-                  className="mt-2 text-h2 font-bold leading-[1.05] tracking-tighter"
+            <div className="shrink-0 border-b border-fg/10 px-[clamp(1.25rem,4vw,2.25rem)] py-[clamp(1rem,3vw,1.5rem)]">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="font-mono text-small text-accent">
+                    <span aria-hidden className="select-none">
+                      {"// "}
+                    </span>
+                    inscription
+                  </p>
+                  <h2
+                    id="titre-inscription"
+                    className="mt-1.5 text-h2 font-bold leading-[1.05] tracking-tighter"
+                  >
+                    Garde ta place.
+                  </h2>
+                </div>
+
+                {/* Premier élément focusable du panneau : `showModal()` lui
+                  donne le focus, ce qui annonce la modale sans ouvrir le
+                  clavier d'un téléphone comme le ferait un champ. */}
+                <button
+                  type="button"
+                  onClick={fermer}
+                  aria-label="Fermer"
+                  className="-mr-2 -mt-2 grid size-11 shrink-0 place-items-center
+                           rounded-pill text-fg/60 transition-colors
+                           duration-[160ms] hoverable:hover:text-fg
+                           active:scale-[0.92]"
                 >
-                  Garde ta place.
-                </h2>
+                  <svg
+                    viewBox="0 0 24 24"
+                    aria-hidden
+                    className="size-5 stroke-current"
+                    fill="none"
+                    strokeWidth="1.75"
+                    strokeLinecap="round"
+                  >
+                    <path d="M6 6l12 12M18 6L6 18" />
+                  </svg>
+                </button>
               </div>
 
-              {/* Premier élément focusable du panneau : `showModal()` lui
-                donne le focus, ce qui annonce la modale sans ouvrir le
-                clavier d'un téléphone comme le ferait un champ. */}
-              <button
-                type="button"
-                onClick={fermer}
-                aria-label="Fermer"
-                className="-mr-2 -mt-2 grid size-11 shrink-0 place-items-center
-                         rounded-pill text-fg/60 transition-colors
-                         duration-[160ms] hoverable:hover:text-fg
-                         active:scale-[0.92]"
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  aria-hidden
-                  className="size-5 stroke-current"
-                  fill="none"
-                  strokeWidth="1.75"
-                  strokeLinecap="round"
-                >
-                  <path d="M6 6l12 12M18 6L6 18" />
-                </svg>
-              </button>
+              {/* Les faits déjà confirmés, rappelés au moment de décider. Ni la
+                date ni le quota : ils ne sont pas arrêtés, et un rappel n'est
+                pas un endroit pour un [À DÉTERMINER]. */}
+              <p className="mt-2 text-small text-fg/60">
+                {[prix, edition?.format, edition?.ville]
+                  .filter((v): v is string => Boolean(v && v !== A_DETERMINER))
+                  .join(" · ")}
+              </p>
             </div>
 
-            {/* Les faits déjà confirmés, rappelés au moment de décider. Ni la
-              date ni le quota : ils ne sont pas arrêtés, et un rappel n'est
-              pas un endroit pour un [À DÉTERMINER]. */}
-            <p className="mt-3 text-small text-fg/60">
-              {[prix, edition?.format, edition?.ville]
-                .filter((v): v is string => Boolean(v && v !== A_DETERMINER))
-                .join(" · ")}
-            </p>
-
-            <div className="mt-[clamp(1.25rem,3svh,2rem)]">
+            <div className="flex-1 overflow-y-auto px-[clamp(1.25rem,4vw,2.25rem)] py-[clamp(1.25rem,3svh,1.75rem)]">
               {edition ? (
                 <>
                   {editions.length > 1 ? (
@@ -252,7 +253,6 @@ export function ModaleInscription({
               )}
             </div>
           </div>
-        </div>
         </div>
       )}
     </ContexteInscription.Provider>

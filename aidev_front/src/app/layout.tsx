@@ -30,7 +30,7 @@ export const metadata: Metadata = {
     template: "%s | AIDevClassroom",
   },
   description:
-    "Formation intensive en présentiel à Yamoussoukro (Côte d'Ivoire) : apprendre à guider l'IA avec une méthode d'ingénierie logicielle, sécuriser son code et déployer son application web en ligne.",
+    "Formation intensive en présentiel à Yamoussoukro (Yakro, Côte d'Ivoire) : apprendre à guider l'IA avec une méthode d'ingénierie logicielle, sécuriser son code et déployer son application web en ligne.",
   applicationName: "AIDevClassroom",
   keywords: MOTS_CLES_SEO,
   authors: [{ name: "AIDevClassroom", url: siteUrl }],
