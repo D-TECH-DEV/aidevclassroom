@@ -65,7 +65,7 @@ api.defaults.headers.common.Authorization = `Bearer ${token}`;
 
 ## Jeton de suivi participant (pas un JWT)
 
-À la création d'une inscription (`POST /api/v1/enrollments`), le serveur génère `trackingToken` (hex 64 car.) et ne stocke que son hash SHA-256. **Il n'est renvoyé qu'une seule fois.** Le frontend doit le conserver et le transmettre ensuite via :
+À la création d'une inscription (`POST /api/v1/enrollments`), le serveur génère `trackingToken` (hex 64 car.) et ne stocke que son hash SHA-256. **Il n'est renvoyé qu'une seule fois**, sauf reprise par e-mail (`POST /api/v1/enrollments/by-email`, 10/min : re-emet un jeton par dossier, rotation, sans OTP). Le frontend doit le conserver et le transmettre ensuite via :
 
 - header `x-tracking-token: <token>`, ou
 - query `?trackingToken=<token>`, ou (sauf `verify`) body `trackingToken` — token de 16 car. minimum, comparé en `timingSafeEqual`.
@@ -74,7 +74,7 @@ Routes concernées : `GET /api/v1/enrollments/:id/status`, `POST /api/v1/payment
 
 ## Routes sans token
 
-Publiques : `GET /api/v1/health`, `POST /auth/login`, `POST /students`, `GET /sprints`, `GET /sprints/:id` (ACTIVE uniquement), `POST /enrollments`, `POST /payments/webhook/paystack` (signature Paystack, pas un navigateur).
+Publiques : `GET /api/v1/health`, `POST /auth/login`, `POST /students`, `GET /sprints`, `GET /sprints/:id` (ACTIVE uniquement), `POST /enrollments`, `POST /enrollments/by-email`, `POST /payments/webhook/paystack` (signature Paystack, pas un navigateur).
 
 ## Erreurs 401 / 403
 

@@ -37,7 +37,7 @@ export class DashboardController {
   outstanding(@Query('page') page?: string, @Query('limit') limit?: string) {
     return this.dashboard.outstandingBalances(
       page ? parseInt(page, 10) : 1,
-      limit ? parseInt(limit, 10) : 20,
+      limit ? parseInt(limit, 10) : 50,
     );
   }
 }

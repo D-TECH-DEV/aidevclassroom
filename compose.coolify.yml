@@ -1,0 +1,156 @@
+# ==============================================================================
+# Environnement PRODUCTION COOLIFY — Docker Compose (compose.coolify.yml)
+# Stack complète (PostgreSQL + Migrate + Backend + Frontend + Proxy Nginx)
+# Conçu pour Coolify : sans container_name fixe ni ports hôte 80/443 en conflit
+# avec Traefik. Associer le domaine public Coolify sur le service `proxy` (:80).
+# ==============================================================================
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-aidev_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-aidev_db}
+    volumes:
+      - aidev-pgdata-coolify:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-aidev_user} -d $${POSTGRES_DB:-aidev_db}"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    command:
+      [
+        "redis-server",
+        "--appendonly",
+        "yes",
+        "--maxmemory",
+        "128mb",
+        "--maxmemory-policy",
+        "noeviction",
+        "--requirepass",
+        "${REDIS_PASSWORD}",
+      ]
+    volumes:
+      - aidev-redisdata-coolify:/data
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -q PONG"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  migrate:
+    build:
+      context: ./aidev_api
+      target: prod
+    restart: "no"
+    command: ["npx", "prisma", "migrate", "deploy"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  backend:
+    build:
+      context: ./aidev_api
+      target: prod
+    restart: unless-stopped
+    expose:
+      - "3000"
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PORT:-3000}
+      API_PREFIX: ${API_PREFIX:-api/v1}
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
+      PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY}
+      PAYSTACK_PUBLIC_KEY: ${PAYSTACK_PUBLIC_KEY:-}
+      PAYSTACK_BASE_URL: ${PAYSTACK_BASE_URL:-https://api.paystack.co}
+      PAYSTACK_CALLBACK_URL: ${PAYSTACK_CALLBACK_URL}
+      PAYSTACK_CURRENCY: ${PAYSTACK_CURRENCY:-XOF}
+      PAYSTACK_CHARGE_ENABLED: ${PAYSTACK_CHARGE_ENABLED:-true}
+      PAYSTACK_CHARGE_PROVIDERS: ${PAYSTACK_CHARGE_PROVIDERS:-mtn,orange,wave}
+      PAYSTACK_PENDING_RESERVE_MINUTES: ${PAYSTACK_PENDING_RESERVE_MINUTES:-120}
+      PAYSTACK_CHARGE_POLL_TIMEOUT_MS: ${PAYSTACK_CHARGE_POLL_TIMEOUT_MS:-180000}
+      PAYSTACK_CHARGE_POLL_INTERVAL_MS: ${PAYSTACK_CHARGE_POLL_INTERVAL_MS:-5000}
+      PAYSTACK_FAILED_SHORT_CIRCUIT_MINUTES: ${PAYSTACK_FAILED_SHORT_CIRCUIT_MINUTES:-15}
+      PAYSTACK_HTTP_TIMEOUT_MS: ${PAYSTACK_HTTP_TIMEOUT_MS:-15000}
+      FRONTEND_URL: ${FRONTEND_URL}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
+      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD}@redis:6379}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-AIDevClassroom <no-reply@ai-devclassroom.com>}
+      RECEIPT_SIGNING_SECRET: ${RECEIPT_SIGNING_SECRET:-}
+    volumes:
+      - aidev-uploads-coolify:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/v1/health | grep -q '\"status\":\"ok\"' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+  frontend:
+    build:
+      context: ./aidev_front
+      target: prod
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://backend:3000/api/v1}
+        NEXT_PUBLIC_PAYSTACK_CHARGE_ENABLED: ${NEXT_PUBLIC_PAYSTACK_CHARGE_ENABLED:-1}
+    restart: unless-stopped
+    expose:
+      - "3000"
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://backend:3000/api/v1}
+      NEXT_PUBLIC_PAYSTACK_CHARGE_ENABLED: ${NEXT_PUBLIC_PAYSTACK_CHARGE_ENABLED:-1}
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+  proxy:
+    build:
+      context: ./nginx
+    restart: unless-stopped
+    expose:
+      - "80"
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/healthz | grep -q 'healthy' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  aidev-pgdata-coolify:
+  aidev-redisdata-coolify:
+  aidev-uploads-coolify:

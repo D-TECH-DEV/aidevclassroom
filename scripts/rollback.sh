@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # Procédure de Rollback Applicatif — Aidev Classroom
-# Usage : ./scripts/rollback.sh [dev|preprod|prod] [TAG_API] [TAG_FRONTEND]
+# Usage : ./scripts/rollback.sh [dev|prod|coolify] [TAG_API] [TAG_FRONTEND]
 #   TAG_FRONTEND est optionnel (defaut : meme valeur que TAG_API).
 #   Mode non interactif (CI) : ROLLBACK_AUTO_CONFIRM=oui dans l'environnement.
 # ==============================================================================

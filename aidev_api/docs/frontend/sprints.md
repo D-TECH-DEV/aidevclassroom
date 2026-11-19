@@ -17,8 +17,10 @@ Basé sur [sprints.controller.ts](../../src/sprints/sprints.controller.ts) et [s
 | `name` | string ≤ 150, requis | |
 | `slug` | string ≤ 190, unique, requis à la création, **non modifiable ensuite** | |
 | `description` | string \| null | facultatif |
-| `priceXof` | entier > 0 | prix figé à l'inscription (`totalAmountXof`) |
+| `priceXof` | entier > 0 | prix solo, figé à l'inscription (`totalAmountXof`) |
 | `minimumPaymentXof` | entier ≥ 1, `≤ priceXof` sinon `400 MINIMUM_EXCEEDS_PRICE` | |
+| `duoPriceXof` | entier > 0 \| null | prix duo (2 places), facultatif ; `null` = pas de forfait duo |
+| `duoMinimumPaymentXof` | entier ≥ 1 \| null | `≤ duoPriceXof` sinon `400 DUO_MINIMUM_EXCEEDS_PRICE` ; sans prix duo → `400 DUO_MINIMUM_WITHOUT_PRICE` |
 | `startAt` / `endAt` | ISO 8601, `endAt > startAt` sinon `400 INVALID_DATES` | |
 | `capacity` | entier ≥ 1 \| null | `null` = places illimitées |
 | `status` | enum, défaut `DRAFT` | passe par la route dédiée |
@@ -30,9 +32,19 @@ Basé sur [sprints.controller.ts](../../src/sprints/sprints.controller.ts) et [s
 
 Renvoie les sprints visibles du site : `ACTIVE` (inscriptions ouvertes) et `INACTIVE` (sessions annoncées en « Bientôt »), triés `createdAt desc`. Ni `DRAFT`, ni `COMPLETED`. Même enveloppe `{ items, total, page, limit }`. À utiliser pour afficher le catalogue.
 
+Chaque item porte le compteur d'inscrits :
+- `enrolledCount` : dossiers non annulés dont le total des versements `SUCCESS` atteint le minimum du sprint ;
+- `enrolledSeats` : personnes inscrites — un dossier `DUO` qualifié vaut 2 places (même convention que `capacity`).
+
+Seule la jauge du site utilise `enrolledSeats` (`inscrits / quota`).
+
 ### `GET /api/v1/sprints/:id` — publique
 
-Fiche uniquement si le sprint est `ACTIVE`, sinon `404 { NOT_FOUND / SPRINT_NOT_FOUND }`. Ne pas s'en servir pour deviner l'existence d'un brouillon.
+Fiche uniquement si le sprint est `ACTIVE`, sinon `404 { NOT_FOUND / SPRINT_NOT_FOUND }`. Ne pas s'en servir pour deviner l'existence d'un brouillon. Porte aussi `enrolledCount` / `enrolledSeats`.
+
+### `GET /api/v1/sprints/:id/enrolled-count` — publique
+
+Compteur seul (utile pour rafraîchir la jauge sans recharger le catalogue) : `{ sprintId, enrolledCount, enrolledSeats, capacity }`. `404 SPRINT_NOT_FOUND` si le sprint est inconnu, brouillon ou terminé.
 
 ## Routes admin (JWT `ADMIN`)
 
@@ -58,9 +70,13 @@ Tous statuts par défaut ; filtre optionnel `status` (enum). `status` invalide �
 
 `status` facultatif. Erreurs : `400` validation / `MINIMUM_EXCEEDS_PRICE` / `INVALID_DATES`, `409 SLUG_EXISTS`.
 
+### `GET /api/v1/admin/sprints/:id`
+
+Fiche complète quel que soit le statut (édition dashboard). `404 SPRINT_NOT_FOUND` si inconnu.
+
 ### `PATCH /api/v1/sprints/:id`
 
-Champs modifiables : `name, description, priceXof, minimumPaymentXof, startAt, endAt, capacity`. **Ni `slug`, ni `status`** (rejetés par `forbidNonWhitelisted` → `400`). Les inscriptions existantes gardent l'ancien prix.
+Champs modifiables : `name, description, priceXof, minimumPaymentXof, duoPriceXof, duoMinimumPaymentXof, startAt, endAt, capacity`. **Ni `slug`, ni `status`** (rejetés par `forbidNonWhitelisted` → `400`). Les inscriptions existantes gardent l'ancien prix. `duoPriceXof: null` retire le forfait duo.
 
 ### `PATCH /api/v1/sprints/:id/status`
 

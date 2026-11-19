@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # Démarrage des services — Aidev Classroom
-# Usage : ./scripts/start.sh [dev|preprod|prod] [service_optionnel]
+# Usage : ./scripts/start.sh [dev|prod|coolify] [service_optionnel]
 # ==============================================================================
 set -Eeuo pipefail
 

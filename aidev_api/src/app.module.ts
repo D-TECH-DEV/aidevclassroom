@@ -5,12 +5,14 @@ import { AdminsModule } from './admins/admins.module';
 import { AuthModule } from './auth/auth.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
+import { RedisModule } from './common/redis/redis.module';
 import { AppConfigModule } from './config/config.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { EnrollmentsModule } from './enrollments/enrollments.module';
 import { HealthModule } from './health/health.module';
 import { PaymentsModule } from './payments/payments.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { SiteContentModule } from './site-content/site-content.module';
 import { SprintsModule } from './sprints/sprints.module';
 import { StudentsModule } from './students/students.module';
 
@@ -18,10 +20,12 @@ import { StudentsModule } from './students/students.module';
   imports: [
     AppConfigModule,
     PrismaModule,
+    RedisModule,
     ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 120 }]),
     AuthModule,
     AdminsModule,
     SprintsModule,
+    SiteContentModule,
     StudentsModule,
     EnrollmentsModule,
     PaymentsModule,

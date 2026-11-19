@@ -1,4 +1,7 @@
 import {
+  ArrayMaxSize,
+  IsArray,
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsInt,
@@ -34,6 +37,16 @@ export class CreateSprintDto {
   @Min(1)
   minimumPaymentXof!: number;
 
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  duoPriceXof?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  duoMinimumPaymentXof?: number;
+
   @IsDateString()
   startAt!: string;
 
@@ -44,6 +57,33 @@ export class CreateSprintDto {
   @IsInt()
   @Min(1)
   capacity?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  city?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  location?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  format?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  level?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(8)
+  @IsString({ each: true })
+  @MaxLength(160, { each: true })
+  modules?: string[];
 
   @IsOptional()
   @IsEnum(SprintStatus)
@@ -71,6 +111,16 @@ export class UpdateSprintDto {
   minimumPaymentXof?: number;
 
   @IsOptional()
+  @IsInt()
+  @Min(1)
+  duoPriceXof?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  duoMinimumPaymentXof?: number | null;
+
+  @IsOptional()
   @IsDateString()
   startAt?: string;
 
@@ -82,9 +132,65 @@ export class UpdateSprintDto {
   @IsInt()
   @Min(1)
   capacity?: number | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  city?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  location?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  format?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  level?: string | null;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(8)
+  @IsString({ each: true })
+  @MaxLength(160, { each: true })
+  modules?: string[] | null;
+
+  @IsOptional()
+  @IsBoolean()
+  notifyParticipants?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  notificationNote?: string;
 }
 
 export class ChangeSprintStatusDto {
   @IsEnum(SprintStatus)
   status!: SprintStatus;
+
+  @IsOptional()
+  @IsBoolean()
+  notifyParticipants?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  notificationNote?: string;
+}
+
+export class NotifySelectionDto {
+  @IsOptional()
+  @IsBoolean()
+  notifyParticipants?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  note?: string;
 }

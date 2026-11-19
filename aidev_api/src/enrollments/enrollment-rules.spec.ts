@@ -21,9 +21,11 @@ describe('Transitions inscription (RG07 : etats separes)', () => {
   });
 });
 
-describe('Transitions sprint (RG07)', () => {
-  it('COMPLETED est terminal et DRAFT ne va pas directement a COMPLETED', () => {
-    expect(SPRINT_TRANSITIONS.COMPLETED).toEqual([]);
-    expect(SPRINT_TRANSITIONS.DRAFT).not.toContain('COMPLETED');
+describe('Transitions sprint', () => {
+  it('autorise toutes les transitions libres entre les 4 statuts', () => {
+    expect(SPRINT_TRANSITIONS.COMPLETED).toEqual(
+      expect.arrayContaining(['DRAFT', 'ACTIVE', 'INACTIVE']),
+    );
+    expect(SPRINT_TRANSITIONS.DRAFT).toContain('COMPLETED');
   });
 });

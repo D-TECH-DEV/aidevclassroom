@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # Construction des images Docker — Aidev Classroom
-# Usage : ./scripts/build.sh [dev|preprod|prod] [service_optionnel]
+# Usage : ./scripts/build.sh [dev|prod|coolify] [service_optionnel]
 # ==============================================================================
 set -Eeuo pipefail
 

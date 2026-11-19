@@ -16,12 +16,12 @@ Pas de `{ success }`, pas de `totalPages`. Les champs sensibles (`password`, `tr
 
 | Code | Quand | `code` typiques | Stratégie frontend |
 |---|---|---|---|
-| `400` | validation DTO, champ inconnu, transition interdite, montant invalide | `BAD_REQUEST`, `INVALID_STATUS_TRANSITION`, `INVALID_ENROLLMENT_TRANSITION`, `PAYMENT_AMOUNT_INVALID`, `BELOW_MINIMUM`, `ENROLLMENT_NOT_SETTLED` | afficher `message`, corriger le formulaire ; ne pas réessayer tel quel |
+| `400` | validation DTO, champ inconnu, transition interdite, montant invalide | `BAD_REQUEST`, `INVALID_STATUS_TRANSITION`, `INVALID_ENROLLMENT_TRANSITION`, `INVALID_PLAN`, `PARTNER_REQUIRED`, `DUO_MINIMUM_WITHOUT_PRICE`, `DUO_MINIMUM_EXCEEDS_PRICE`, `PAYMENT_AMOUNT_INVALID`, `BELOW_MINIMUM`, `ENROLLMENT_NOT_SETTLED` | afficher `message`, corriger le formulaire ; ne pas réessayer tel quel |
 | `401` | JWT absent/expiré/compte désactivé, login faux, token de suivi absent/invalide | `UNAUTHORIZED`, `INVALID_CREDENTIALS`, `INVALID_CURRENT_PASSWORD`, `TRACKING_TOKEN_REQUIRED`, `TRACKING_TOKEN_INVALID` | login expiré → rediriger vers login ; suivi → redemander le lien/token |
 | `403` | JWT valide sans rôle `ADMIN` | `FORBIDDEN` | masquer les écrans admin |
 | `404` | ressource inconnue, sprint non-ACTIVE côté public | `NOT_FOUND`, `ADMIN_NOT_FOUND`, `STUDENT_NOT_FOUND`, `SPRINT_NOT_FOUND`, `ENROLLMENT_NOT_FOUND`, `PAYMENT_NOT_FOUND` | écran « introuvable » |
 | `409` | conflit métier | `ADMIN_EMAIL_EXISTS`, `DUPLICATE_ENROLLMENT`, `SPRINT_CAPACITY_REACHED`, `HAS_ENROLLMENTS`, `PAYMENT_AMOUNT_EXCEEDS_BALANCE`, `ENROLLMENT_ALREADY_SETTLED`, `REFERENCE_CONFLICT` | informer, proposer une alternative (autre sprint, montant moindre) |
-| `422` | règle métier (entité comprise mais refusée) | `SPRINT_NOT_ACTIVE`, `ENROLLMENT_CANCELLED`, `PAYMENT_VERIFICATION_MISMATCH` | ne pas réessayer sans changer l'état |
+| `422` | règle métier (entité comprise mais refusée) | `SPRINT_NOT_ACTIVE`, `DUO_NOT_AVAILABLE`, `ENROLLMENT_CANCELLED`, `PAYMENT_VERIFICATION_MISMATCH` | ne pas réessayer sans changer l'état |
 | `429` | throttle (global 120/min, login 10/min, register/enroll 20/min) | `TOO_MANY_REQUESTS` | attendre + réessayer avec backoff |
 | `500` | inattendue | `INTERNAL_ERROR` | message générique + retry ; contacter le support |
 | `502` | Paystack `verify` injoignable | `PAYSTACK_VERIFY_FAILED` | réessayer `verify` / `recheck` plus tard |
