@@ -51,8 +51,25 @@ export class CreateEnrollmentDto {
 }
 
 export class LookupByEmailDto {
+  @IsOptional()
   @IsEmail({}, { message: 'E-mail invalide.' })
-  email!: string;
+  email?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^\+[1-9]\d{6,17}$/, {
+    message:
+      'Telephone invalide : prefixe international requis (ex. +2250700000000).',
+  })
+  phone?: string;
+}
+
+export class VerifyRecoveryOtpDto extends LookupByEmailDto {
+  @IsString()
+  @Matches(/^\d{6}$/, {
+    message: 'Le code de verification doit contenir 6 chiffres.',
+  })
+  code!: string;
 }
 
 export class ChangeEnrollmentStatusDto {

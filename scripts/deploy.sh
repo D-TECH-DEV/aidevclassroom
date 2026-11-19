@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # Script Principal de Déploiement — Aidev Classroom
-# Usage : ./scripts/deploy.sh [dev|preprod|prod] [--with-migrations]
+# Usage : ./scripts/deploy.sh [dev|prod|coolify] [--with-migrations]
 # ==============================================================================
 set -Eeuo pipefail
 

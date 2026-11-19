@@ -10,7 +10,7 @@ L'inspection approfondie du dossier a révélé les éléments suivants :
 
 - **Structure du projet** :
   - `aidev_api` : Backend développé sous **NestJS 11**, persistance assurée par **Prisma ORM 7.10.1** (`@prisma/adapter-pg`, pilote `pg` 8.23.1). Schéma PostgreSQL existant avec migration `0001_init_pg`. Validation stricte des variables d'environnement au démarrage (`src/config/env.validation.ts`). Présence d'une sonde de santé native sur `GET /api/v1/health`.
-  - `aidevsprint` : Frontend développé sous **Next.js 16.4.2** (React 19, Tailwind CSS 4, Turbopack). Présence d'un route handler proxy `/api/[...chemin]` pour contourner les blocages CORS du navigateur.
+  - `aidev_front` : Frontend développé sous **Next.js 16.4.2** (React 19, Tailwind CSS 4, Turbopack). Présence d'un route handler proxy `/api/[...chemin]` pour contourner les blocages CORS du navigateur.
   - Base de données PostgreSQL externe : Déjà en place et administrée sur le VPS de l'utilisateur.
 
 - **Points critiques et anomalies identifiés lors de l'audit** :
@@ -61,15 +61,15 @@ L'architecture est optimisée pour un **VPS Ubuntu** exécutant **Docker Compose
 
 ### Fichiers Modifiés :
 - `.gitignore` : Ajout de la règle d'exception `!.env.*.example` pour versionner les templates d'environnement tout en sécurisant les secrets réels.
-- `aidevsprint/next.config.ts` : Ajout de l'instruction `output: "standalone"` pour minimiser drastiquement le poids de l'image Docker frontend.
+- `aidev_front/next.config.ts` : Ajout de l'instruction `output: "standalone"` pour minimiser drastiquement le poids de l'image Docker frontend.
 - `aidev_api/.dockerignore` : Mise à jour pour inclure `!.env.*.example`.
 
 ### Fichiers Créés :
 
 #### Dockerfiles & Ignore :
 - `aidev_api/Dockerfile` : Construction multi-stage (`base`, `dev`, `build`, `prod`), utilisateur non-root `node`, healthcheck natif, `CMD ["node", "dist/main"]` (aucune migration destructrice ou automatique au démarrage).
-- `aidevsprint/Dockerfile` : Construction multi-stage (`base`, `dev`, `builder`, `prod`), utilisateur non-root `nextjs:nodejs`, mode standalone, injection sécurisée de `NEXT_PUBLIC_API_URL` à l'étape build.
-- `aidevsprint/.dockerignore` : Exclusion des dépendances, caches `.next`, fichiers markdown et variables sensibles.
+- `aidev_front/Dockerfile` : Construction multi-stage (`base`, `dev`, `builder`, `prod`), utilisateur non-root `nextjs:nodejs`, mode standalone, injection sécurisée de `NEXT_PUBLIC_API_URL` à l'étape build.
+- `aidev_front/.dockerignore` : Exclusion des dépendances, caches `.next`, fichiers markdown et variables sensibles.
 
 #### Orchestration Docker Compose :
 - `compose.dev.yml` : Environnement de développement avec hot-reload, montages de volumes, volumes anonymes isolés pour `node_modules` et ports mappés (`3000` et `3001`).
@@ -200,10 +200,10 @@ Travail exécuté directement sur le VPS (utilisateur : domaine `ai-devclassroom
 - **Créé `aidev_api/.dockerignore`** (manquant).
 - **`compose.prod.yml`** : backend + proxy rattachés au réseau externe préexistant `main-network` (atteindre `postgres` et NPM) ; proxy publié uniquement en `127.0.0.1:8081:80` (conflit 80/443) ; healthcheck frontend en `127.0.0.1` (voir §9.3).
 - **`nginx/conf.d/default.conf`** : `location /api/v1/` → backend NestJS ; `location /api/` → frontend Next.js (relais même-origine). Sans ceci, le relais `/api/sprints` du frontend était court-circuité par l'ancien `location /api/` → 404 NestJS.
-- **`aidevsprint/Dockerfile`** : `npm ci --include=dev` (même cause : tailwindcss/typescript manquants → `Cannot find module '@tailwindcss/turbopack'`).
-- **`aidevsprint/src/app/admin/(panneau)/layout.tsx`** : ajout `export const dynamic = "force-dynamic"` (les pages admin lisent la session par cookie : non pré-rendables).
-- **`aidevsprint/next.config.ts`** : retrait `cacheComponents` + `partialPrefetching` (incompatibles avec les pages ci-dessus ; `dynamic` interdit sous cacheComponents). ISR conservée via `revalider`.
-- **`aidevsprint/src/components/layout/Footer.tsx`** : retrait de la directive `"use cache"` (requiert cacheComponents) ; le pré-rendu statique fige déjà l'année au build.
+- **`aidev_front/Dockerfile`** : `npm ci --include=dev` (même cause : tailwindcss/typescript manquants → `Cannot find module '@tailwindcss/turbopack'`).
+- **`aidev_front/src/app/admin/(panneau)/layout.tsx`** : ajout `export const dynamic = "force-dynamic"` (les pages admin lisent la session par cookie : non pré-rendables).
+- **`aidev_front/next.config.ts`** : retrait `cacheComponents` + `partialPrefetching` (incompatibles avec les pages ci-dessus ; `dynamic` interdit sous cacheComponents). ISR conservée via `revalider`.
+- **`aidev_front/src/components/layout/Footer.tsx`** : retrait de la directive `"use cache"` (requiert cacheComponents) ; le pré-rendu statique fige déjà l'année au build.
 - **Créé `.env.prod`** (`chmod 600`, non versionné) : `DATABASE_URL` vers `postgres:5432/aidev_db` (mot de passe existant recopié sans affichage), `JWT_SECRET` existant réutilisé (continuité des sessions), `PAYSTACK_SECRET_KEY` existante **`sk_test_...` recopiée telle quelle (clé live à fournir)**, `DOMAIN_NAME=API_DOMAIN_NAME=ai-devclassroom.com`, `FRONTEND_URL=https://ai-devclassroom.com`, `NEXT_PUBLIC_API_URL=http://backend:3000/api/v1` (serveur-à-serveur interne), `SWAGGER_ENABLED=false`, `HTTP_PORT=8081`.
 
 ### 9.3 Problèmes rencontrés et résolus

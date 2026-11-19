@@ -1,6 +1,6 @@
 # Rapport — Correction du montant incorrect lors de la réservation et du paiement Paystack
 
-Date : 2026-11-07 — Périmètre : `aidev_api` (NestJS/Prisma) + `aidevsprint` (site Next.js).
+Date : 2026-11-07 — Périmètre : `aidev_api` (NestJS/Prisma) + `aidev_front` (site Next.js, ex-`aidevsprint`).
 
 ## 1. Cause exacte du problème
 
@@ -57,7 +57,7 @@ De plus, tous les `PENDING` — y compris les checkouts abandonnés depuis des j
 | `aidev_api/src/payments/payments.service.spec.ts` | 6 nouveaux tests (voir §5) + mock `createdAt`/`$queryRaw` |
 | `aidev_api/src/payments/balance.spec.ts` | Scénario séquentiel 10 000 → 15 000 → solde 25 000 |
 | `aidev_api/src/enrollments/enrollments.service.spec.ts` | Test prix figé après changement catalogue |
-| `aidevsprint/src/components/inscription/FormulaireInscription.tsx` | Boutons/acompte calculés sur le total serveur, plus le catalogue |
+| `aidev_front/src/components/inscription/FormulaireInscription.tsx` | Boutons/acompte calculés sur le total serveur, plus le catalogue |
 | `aidev_api/.env.example` | Nouvelle variable `PAYSTACK_PENDING_RESERVE_MINUTES="120"` |
 
 ## 3. Ancienne logique → nouvelle logique
@@ -139,7 +139,7 @@ pas contournée.
 
 Chaîne de vérification exécutée : `prisma generate` → `jest` (6/6 suites, 39/39) →
 `eslint` (propre) → `tsc --noEmit` (propre). Le frontend n'a pas de harnais de test
-(aucun runner dans `aidevsprint`) : la modification y est minimale (source du montant)
+(aucun runner dans `aidev_front`) : la modification y est minimale (source du montant)
 et couverte en invariant côté backend ; vérification manuelle recommandée (réserver
 puis comparer l'acompte/total affichés au total figé).
 

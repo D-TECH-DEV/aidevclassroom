@@ -46,19 +46,31 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const raw =
       exception instanceof HttpException ? exception.getResponse() : null;
 
-    let code = 'INTERNAL_ERROR';
+    let code =
+      status === 400
+        ? 'BAD_REQUEST'
+        : status === 401
+          ? 'UNAUTHORIZED'
+          : status === 403
+            ? 'FORBIDDEN'
+            : status === 404
+              ? 'NOT_FOUND'
+              : status === 409
+                ? 'CONFLICT'
+                : status === 429
+                  ? 'TOO_MANY_REQUESTS'
+                  : status === 503
+                    ? 'SERVICE_UNAVAILABLE'
+                    : 'INTERNAL_ERROR';
     let message = 'Erreur interne du serveur.';
     if (typeof raw === 'string') {
-      message = raw;
+      message =
+        status === 429
+          ? 'Trop de requetes. Patientez un instant avant de reessayer.'
+          : raw;
     } else if (raw && typeof raw === 'object') {
       const r = raw as Record<string, unknown>;
       if (typeof r['code'] === 'string') code = r['code'];
-      else if (status === 400) code = 'BAD_REQUEST';
-      else if (status === 401) code = 'UNAUTHORIZED';
-      else if (status === 403) code = 'FORBIDDEN';
-      else if (status === 404) code = 'NOT_FOUND';
-      else if (status === 409) code = 'CONFLICT';
-      else if (status === 429) code = 'TOO_MANY_REQUESTS';
       const m = r['message'];
       if (typeof m === 'string') message = m;
       else if (Array.isArray(m)) message = m.join('; ');

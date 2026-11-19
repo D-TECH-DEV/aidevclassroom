@@ -23,7 +23,7 @@ Scripts existants : `build.sh`, `common.sh`, `deploy.sh`, `logs.sh`,
    obligatoire en production, incompatible avec un runner CI.
 4. **Faux risque écarté après vérification** : `NEXT_PUBLIC_API_URL`
    (`http://backend:3000/api/v1`) semblait injoignable depuis un navigateur,
-   mais le code (`aidevsprint/src/lib/api.ts`) ne l'utilise que côté serveur
+   mais le code (`aidev_front/src/lib/api.ts`) ne l'utilise que côté serveur
    (le navigateur passe par le relais même-origine `/api`, route
    `src/app/api/[...chemin]/route.ts`). La valeur est donc correcte sur le
    réseau Compose. Elle est injectée au build : chaque déploiement

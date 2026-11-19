@@ -3,23 +3,44 @@ import {
   ExecutionContext,
   Injectable,
   NotFoundException,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { createHash, timingSafeEqual } from 'crypto';
 import { TrackedRequest } from '../common/guards/tracking-token.guard';
 import { PrismaService } from '../prisma/prisma.service';
+import { verifyReceiptAccess } from './receipt-signature.util';
 
 interface PaymentVerifyRequest {
+  method?: string;
   params: { reference?: string };
   headers: TrackedRequest['headers'];
   query: TrackedRequest['query'];
   user?: { role: string; isActive: boolean } | null;
 }
 
-/** Acces a la verification d'un paiement : admin JWT ou jeton de suivi de l'inscription. */
+function readHeader(
+  headers: TrackedRequest['headers'] | undefined,
+  name: string,
+): string | undefined {
+  const val = headers?.[name];
+  return Array.isArray(val) ? val[0] : val;
+}
+
+/**
+ * Acces a un paiement :
+ * - Admin JWT actif : acces complet.
+ * - Jeton de suivi (header x-tracking-token) : acces participant complet.
+ * - Signature HMAC du QR code (headers x-receipt-sig + x-receipt-exp) :
+ *   lecture seule uniquement sur les routes GET (verify et receipt).
+ */
 @Injectable()
 export class PaymentAccessGuard implements CanActivate {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly config?: ConfigService,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<PaymentVerifyRequest>();
@@ -43,16 +64,32 @@ export class PaymentAccessGuard implements CanActivate {
         message: 'Paiement introuvable.',
       });
     }
-    const h = req.headers['x-tracking-token'];
-    const header = Array.isArray(h) ? h[0] : h;
-    const q = req.query['trackingToken'];
-    const token = header ?? (typeof q === 'string' ? q : undefined);
+
+    const token = readHeader(req.headers, 'x-tracking-token');
     if (!token) {
+      const sig = readHeader(req.headers, 'x-receipt-sig');
+      const exp = readHeader(req.headers, 'x-receipt-exp');
+      if (sig && exp && (req.method ?? '').toUpperCase() === 'GET') {
+        const secret =
+          this.config?.get<string>('RECEIPT_SIGNING_SECRET')?.trim() ||
+          this.config?.get<string>('JWT_SECRET')?.trim() ||
+          process.env.RECEIPT_SIGNING_SECRET?.trim() ||
+          process.env.JWT_SECRET?.trim() ||
+          '';
+        if (verifyReceiptAccess(reference, sig, exp, secret)) {
+          return true;
+        }
+        throw new UnauthorizedException({
+          code: 'TRACKING_TOKEN_INVALID',
+          message: 'Lien de recu invalide ou expire.',
+        });
+      }
       throw new UnauthorizedException({
         code: 'TRACKING_TOKEN_REQUIRED',
         message: 'Jeton de suivi requis.',
       });
     }
+
     const given = Buffer.from(
       createHash('sha256').update(token, 'utf8').digest('hex'),
       'hex',
