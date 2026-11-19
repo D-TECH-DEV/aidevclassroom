@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 
 import { ScrollFluide } from "@/components/motion/ScrollFluide";
+import { MOTS_CLES_SEO, recupereSiteUrl } from "@/lib/seo";
 import "./globals.css";
 
 const inter = Inter({
@@ -17,14 +18,45 @@ const jetbrainsMono = JetBrains_Mono({
   display: "swap",
 });
 
+const siteUrl = recupereSiteUrl();
+const googleVerification =
+  process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION?.trim();
+
 export const metadata: Metadata = {
-  metadataBase: new URL(
-    process.env.NEXT_PUBLIC_SITE_URL ?? "https://ai-devclassroom.com",
-  ),
-  title: "AIDevClassroom #1 — Repars avec ton portfolio en ligne",
+  metadataBase: new URL(siteUrl),
+  title: {
+    default:
+      "AIDevClassroom — Formation Développement Web & IA en Côte d'Ivoire",
+    template: "%s | AIDevClassroom",
+  },
   description:
-    "Formation d'une journée à Yamoussoukro : guider l'IA avec de vraies " +
-    "compétences de dev. Le vibe coding, bien fait.",
+    "Formation intensive en présentiel à Yamoussoukro (Côte d'Ivoire) : apprendre à guider l'IA avec une méthode d'ingénierie logicielle, sécuriser son code et déployer son application web en ligne.",
+  applicationName: "AIDevClassroom",
+  keywords: MOTS_CLES_SEO,
+  authors: [{ name: "AIDevClassroom", url: siteUrl }],
+  creator: "AIDevClassroom",
+  publisher: "AIDevClassroom",
+  category: "education",
+  alternates: {
+    canonical: "/",
+    languages: {
+      "fr-CI": "/",
+      fr: "/",
+    },
+  },
+  robots: {
+    index: true,
+    follow: true,
+    nocache: false,
+    googleBot: {
+      index: true,
+      follow: true,
+      noimageindex: false,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
   icons: {
     icon: [
       { url: "/logo/aidevclassroom-icon.svg", type: "image/svg+xml" },
@@ -33,11 +65,29 @@ export const metadata: Metadata = {
     apple: "/logo/aidevclassroom-icon.png",
   },
   openGraph: {
-    title: "AIDevClassroom #1 — Repars avec ton portfolio en ligne",
-    description: "Le vibe coding, bien fait. Formation d'une journée à Yamoussoukro.",
+    title:
+      "AIDevClassroom — Formation Développement Web & IA en Côte d'Ivoire",
+    description:
+      "Toi aux commandes. L'IA à l'exécution. Formation intensive en présentiel à Yamoussoukro pour concevoir, coder et déployer un vrai produit web.",
+    url: "/",
+    siteName: "AIDevClassroom",
     locale: "fr_CI",
     type: "website",
   },
+  twitter: {
+    card: "summary_large_image",
+    title:
+      "AIDevClassroom — Formation Développement Web & IA en Côte d'Ivoire",
+    description:
+      "Toi aux commandes. L'IA à l'exécution. Formation intensive en présentiel à Yamoussoukro pour concevoir, coder et déployer un vrai produit web.",
+  },
+  ...(googleVerification
+    ? {
+        verification: {
+          google: googleVerification,
+        },
+      }
+    : {}),
 };
 
 /**
