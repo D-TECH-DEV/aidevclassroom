@@ -62,6 +62,7 @@ export const metadata: Metadata = {
       { url: "/logo/aidevclassroom-icon.svg", type: "image/svg+xml" },
       { url: "/logo/aidevclassroom-icon.png", type: "image/png" },
     ],
+    shortcut: "/logo/aidevclassroom-icon.png",
     apple: "/logo/aidevclassroom-icon.png",
   },
   openGraph: {
