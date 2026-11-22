@@ -2,8 +2,8 @@ type Commun = {
   children: React.ReactNode;
   /** `sm` pour la navbar, `lg` pour le hero. */
   taille?: "sm" | "lg";
-  /** `bleu` par défaut (#0B63F6) ou `vert` (#2EE66B) pour Réserver ma place. */
-  variante?: "bleu" | "vert";
+  /** `bleu` par défaut (#0B63F6), `vert` (#2EE66B plein) pour Réserver ma place, `sombre` sur carte verte. */
+  variante?: "bleu" | "vert" | "sombre";
   /** Occupe toute la largeur disponible — utile dans le menu plein écran. */
   pleineLargeur?: boolean;
   className?: string;
@@ -84,10 +84,17 @@ export function CtaButton({
       : "px-10 py-[clamp(0.75rem,2.4svh,1.375rem)] text-body gap-1";
 
   const estVert = variante === "vert";
+  const estSombre = variante === "sombre";
   const bordure = estVert
-    ? "border-[#2EE66B] text-fg hoverable:hover:text-[#051109]"
-    : "border-cta text-fg";
-  const disque = estVert ? "bg-[#2EE66B]" : "bg-cta";
+    ? "border-[#2EE66B] bg-[#2EE66B] text-[#03140A] shadow-[0_0_24px_rgba(46,230,107,0.28)] hoverable:hover:border-[#5CF28D] hoverable:hover:shadow-[0_0_32px_rgba(46,230,107,0.45)]"
+    : estSombre
+      ? "border-bg bg-bg text-fg hoverable:hover:border-cta"
+      : "border-cta text-fg";
+  const disque = estVert
+    ? "bg-[#5CF28D]"
+    : estSombre
+      ? "bg-cta"
+      : "bg-cta";
 
   const classes = `group relative isolate inline-flex shrink-0 items-center
                    ${pleineLargeur ? "w-full" : "w-fit"}

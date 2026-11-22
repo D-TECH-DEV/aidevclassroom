@@ -20,6 +20,7 @@ import { CtaButton } from "@/components/ui/CtaButton";
 export function BoutonReserver({
   children = "Réserver ma place",
   taille,
+  variante = "vert",
   pleineLargeur,
   className,
   onAvantOuverture,
@@ -27,6 +28,7 @@ export function BoutonReserver({
 }: {
   children?: React.ReactNode;
   taille?: "sm" | "lg";
+  variante?: "bleu" | "vert" | "sombre";
   pleineLargeur?: boolean;
   className?: string;
   onAvantOuverture?: () => void;
@@ -39,7 +41,7 @@ export function BoutonReserver({
     <CtaButton
       type="button"
       taille={taille}
-      variante="vert"
+      variante={variante}
       pleineLargeur={pleineLargeur}
       className={className}
       onClick={() => {
