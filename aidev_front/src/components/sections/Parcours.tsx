@@ -101,8 +101,8 @@ function CarteSprint({
 
       <BoutonReserver
         taille="sm"
+        variante="sombre"
         sprintId={sprint.id}
-        className="bg-bg border-bg text-fg hoverable:hover:border-cta"
       >
         Réserver
       </BoutonReserver>

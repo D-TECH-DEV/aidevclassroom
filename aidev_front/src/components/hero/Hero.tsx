@@ -69,6 +69,9 @@ export function Hero({ edition }: { edition: Edition | null }) {
 
             {edition ? (
               <div>
+                <p className="mb-3 font-mono text-small uppercase tracking-[0.14em] text-accent">
+                  Formation développement web &amp; IA · Yamoussoukro (Yakro), Côte d&apos;Ivoire
+                </p>
                 <h1
                   className="max-w-[16ch] text-display font-bold
                              leading-[0.95] tracking-tighter"
