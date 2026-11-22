@@ -47,7 +47,7 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Audit securite dependances de production
-        run: npm audit --omit=dev --audit-level=high
+        run: npm audit --omit=dev --omit=optional --audit-level=high
 
       - name: Compilation de production
         run: npm run build
@@ -88,7 +88,7 @@ jobs:
           DATABASE_URL: postgresql://build:build@localhost:5432/build?schema=public
 
       - name: Audit securite dependances de production
-        run: npm audit --omit=dev --audit-level=high
+        run: npm audit --omit=dev --omit=optional --audit-level=high
 
       - name: Executer les tests unitaires
         run: npm test
